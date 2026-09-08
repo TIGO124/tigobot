@@ -51,8 +51,11 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 if (!process.env.TOKEN) {
-  console.error('❌ TOKEN bulunamadı! .env dosyasını kontrol et.');
+  console.error('❌ TOKEN bulunamadı! Railway Variables veya .env dosyasını kontrol et.');
   process.exit(1);
 }
 
-client.login(process.env.TOKEN);
+client.login(process.env.TOKEN).catch(err => {
+  console.error('❌ Discord girişi başarısız. TOKEN yanlış olabilir (Bot sekmesindeki token olmalı, Uygulama ID değil):', err.message);
+  process.exit(1);
+});
