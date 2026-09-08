@@ -35,10 +35,7 @@ function build(lang) {
     if (!m) {
       return interaction.reply({ content: t(L, 'ai.unknownModel'), ephemeral: true });
     }
-    await interaction.reply(
-      t(L, 'aim.changed', { m: modelName(m, L) }) +
-      t(L, m.kind === 'local' ? 'aim.note.local' : 'aim.note.cloud')
-    );
+    await interaction.reply(t(L, 'aim.changed', { m: modelName(m, L) }));
   }
 
   return { data, execute };
