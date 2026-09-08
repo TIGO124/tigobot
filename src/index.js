@@ -2,7 +2,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { Client, Collection, GatewayIntentBits, Events } = require('discord.js');
-const handleButton = require('./buttons');
+const { handle: handleButton } = require('./buttons');
 const { updateCounter } = require('./counter');
 const { sanitize } = require('./sanitize');
 
@@ -18,19 +18,38 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// Komutları yükle
+// Komutları yükle (bozuk dosya diğerlerini engellemesin)
 const commandsPath = path.join(__dirname, 'commands');
 for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) {
-  const cmd = require(path.join(commandsPath, file));
-  if (cmd.data && cmd.execute) client.commands.set(cmd.data.name, cmd);
+  try {
+    const cmd = require(path.join(commandsPath, file));
+    if (cmd.data && cmd.execute) client.commands.set(cmd.data.name, cmd);
+    else console.error(`Komut atlandı (${file}): data/execute eksik`);
+  } catch (e) {
+    console.error(`Komut yüklenemedi (${file}): ${e.message}`);
+  }
 }
 
 // Eventleri yükle
 const eventsPath = path.join(__dirname, 'events');
+let eventSayi = 0;
 for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
-  const evt = require(path.join(eventsPath, file));
-  if (evt.once) client.once(evt.name, (...a) => evt.execute(...a));
-  else client.on(evt.name, (...a) => evt.execute(...a));
+  try {
+    const evt = require(path.join(eventsPath, file));
+    if (!evt.name || !evt.execute) {
+      console.error(`Event atlandı (${file}): name/execute eksik`);
+      continue;
+    }
+    if (evt.once) client.once(evt.name, (...a) => evt.execute(...a));
+    else client.on(evt.name, (...a) => evt.execute(...a));
+    eventSayi++;
+  } catch (e) {
+    console.error(`Event yüklenemedi (${file}): ${e.message}`);
+  }
+}
+console.log(`${client.commands.size} komut, ${eventSayi} event yüklendi.`);
+if (typeof handleButton !== 'function') {
+  console.error('KRİTİK: buton karşılayıcı yüklenemedi, butonlar çalışmaz!');
 }
 
 client.once(Events.ClientReady, c => {

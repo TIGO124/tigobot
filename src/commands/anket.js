@@ -31,7 +31,7 @@ module.exports = {
       .map(i => interaction.options.getString(`secenek${i}`))
       .filter(Boolean);
 
-    const pollId = Date.now().toString(36) + Math.floor(Math.random() * 999);
+    const pollId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     const row = new ActionRowBuilder().addComponents(
       secenekler.map((s, i) =>
         new ButtonBuilder()

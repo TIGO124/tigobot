@@ -60,6 +60,8 @@ async function handle(interaction) {
     await interaction.message.edit({ embeds: [oyEmbedi(poll)] }).catch(() => {});
     return interaction.reply({ content: `"${poll.secenekler[idx]}" seçeneğine oy verdin.`, ephemeral: true });
   }
+
+  return interaction.reply({ content: 'Bilinmeyen buton.', ephemeral: true });
 }
 
 module.exports = { handle };

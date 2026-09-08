@@ -31,6 +31,9 @@ module.exports = {
       return interaction.reply({ content: 'Modeli sadece sunucuyu yönetenler değiştirebilir. Mevcut modeli görmek için /aimodels yazman yeterli.', ephemeral: true });
     }
     const m = setGuildModel(interaction.guildId, key);
+    if (!m) {
+      return interaction.reply({ content: 'Bilinmeyen model. Listeyi görmek için /aimodels yaz.', ephemeral: true });
+    }
     await interaction.reply(
       `AI modeli değiştirildi: **${m.name}**` +
       (m.kind === 'local' ? ' (bilgisayarındaki Ollama açık ve tünel bağlı olmalı)' : ' (NVIDIA bulutu üzerinden çalışır)')

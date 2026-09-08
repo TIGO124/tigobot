@@ -14,19 +14,26 @@ function allModels() {
 }
 
 function findModel(key) {
-  return allModels().find(m => m.key === key) || allModels()[0];
+  return allModels().find(m => m.key === key) || null;
+}
+
+function defaultModel() {
+  return allModels()[0];
 }
 
 function getGuildModel(guildId) {
   const map = load('aimodel.json', {});
-  return findModel(map[guildId]);
+  return findModel(map[guildId]) || defaultModel();
 }
 
+// Sadece geçerli anahtar kaydedilir; geçersizse null döner (hayalet kayıt yok)
 function setGuildModel(guildId, key) {
+  const m = findModel(key);
+  if (!m) return null;
   const map = load('aimodel.json', {});
-  map[guildId] = key;
+  map[guildId] = m.key;
   save('aimodel.json', map);
-  return findModel(key);
+  return m;
 }
 
 // Yerel servis kapalıyken cevap verecek yedek: listedeki ilk nvidia modeli
@@ -34,4 +41,4 @@ function defaultNvidia() {
   return allModels().find(m => m.kind === 'nvidia') || allModels()[0];
 }
 
-module.exports = { allModels, findModel, getGuildModel, setGuildModel, defaultNvidia };
+module.exports = { allModels, findModel, getGuildModel, setGuildModel, defaultModel, defaultNvidia };
