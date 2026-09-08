@@ -7,7 +7,7 @@ const { sanitize } = require('./sanitize');
 const { acikMi } = require('./local');
 
 const NVIDIA_BASE = 'https://integrate.api.nvidia.com/v1';
-const SYSTEM_PROMPT = 'Sen TigoBot adında, Türkçe konuşan, yardımsever ve öz cevaplar veren bir Discord botusun.';
+const SYSTEM_PROMPT = 'Senin adın TigoBot. Türkçe konuşan, yardımsever ve öz cevaplar veren bir Discord botusun. Sana nasılsın diye sorulursa kendini TigoBot olarak tanıtarak cevap ver, örneğin: "Merhaba, iyiyim! TigoBot olarak yardıma hazırım." Asla başka bir isim veya kimlik kullanma.';
 const BEKLEME_MS = 15 * 1000;
 const MAX_SORU = 1000;
 
