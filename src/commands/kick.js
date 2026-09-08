@@ -16,7 +16,7 @@ module.exports = {
       await member.kick(reason);
       await interaction.reply(`${member.user.tag} atıldı. Sebep: ${reason}`);
     } catch (e) {
-      await interaction.reply({ content: `Hata: ${e.message}`, ephemeral: true });
+      await interaction.reply({ content: 'Atma işlemi yapılamadı. Yetkilerimi ve rol sıramı kontrol et.', ephemeral: true });
     }
   },
 };

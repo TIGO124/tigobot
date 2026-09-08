@@ -16,7 +16,7 @@ module.exports = {
       await interaction.guild.members.ban(user.id, { reason });
       await interaction.reply(`${user.tag} yasaklandı. Sebep: ${reason}`);
     } catch (e) {
-      await interaction.reply({ content: `Hata: ${e.message}`, ephemeral: true });
+      await interaction.reply({ content: 'Yasaklama yapılamadı. Yetkilerimi ve rol sıramı kontrol et.', ephemeral: true });
     }
   },
 };

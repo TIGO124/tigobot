@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const { kuyrugaEkle, siraBilgisi, uretimYap } = require('./ai');
-const { sanitize } = require('./sanitize');
+const { sanitize, kullaniciMesaji } = require('./sanitize');
 
 function durumEmbed(metin, modelAdi) {
   return new EmbedBuilder()
@@ -90,7 +90,7 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, model, yedek, soru, ba
   } catch (e) {
     bitti = true;
     clearInterval(timer);
-    await mesaj.edit(`Hata: ${sanitize(e.message)}`.slice(0, 2000)).catch(() => {});
+    await mesaj.edit(kullaniciMesaji(e).slice(0, 2000)).catch(() => {});
   }
 }
 

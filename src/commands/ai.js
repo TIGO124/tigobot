@@ -2,7 +2,6 @@ const { SlashCommandBuilder } = require('discord.js');
 const { getUserModel, defaultNvidia } = require('../ai-models');
 const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
 const { guvenilirMi } = require('../trust');
-const { sanitize } = require('../sanitize');
 const { aiAkis, durumEmbed, animMetni } = require('../ai-progress');
 
 module.exports = {

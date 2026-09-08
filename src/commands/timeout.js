@@ -25,7 +25,7 @@ module.exports = {
         .setTimestamp();
       await interaction.reply({ embeds: [embed] });
     } catch (e) {
-      await interaction.reply({ content: `Hata: ${e.message}`, ephemeral: true });
+      await interaction.reply({ content: 'Susturma yapılamadı. Yetkilerimi ve rol sıramı kontrol et.', ephemeral: true });
     }
   },
 };

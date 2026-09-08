@@ -14,4 +14,18 @@ function sanitize(text) {
   return out.slice(0, 500);
 }
 
-module.exports = { sanitize };
+module.exports = { sanitize, kullaniciMesaji };
+
+// Hatayı kullanıcıya gösterilecek genel mesaja çevirir.
+// Teknik detay kanala gitmez, Railway loguna düşer (sahip oradan görür).
+function kullaniciMesaji(e) {
+  const ham = sanitize(e && e.message ? e.message : String(e));
+  if (ham) console.error('İç hata (sadece logda):', ham);
+  if (/NVIDIA_API_KEY/i.test(ham)) return 'AI şu anda kullanılamıyor. Lütfen daha sonra tekrar dene.';
+  if (/AI hatası \((5|429)/.test(ham) || /timeout|zaman aşımı/i.test(ham)) {
+    return 'AI şu anda cevap veremiyor. Lütfen biraz sonra tekrar dene.';
+  }
+  if (/AI hatası \(4/i.test(ham)) return 'AI isteği işlenemedi. Lütfen tekrar dene.';
+  if (/boş cevap/i.test(ham)) return 'AI boş cevap verdi. Lütfen tekrar dene.';
+  return 'Bir sorun oluştu. Lütfen tekrar dene.';
+}

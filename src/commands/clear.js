@@ -12,7 +12,7 @@ module.exports = {
       await interaction.channel.bulkDelete(amount, true);
       await interaction.reply({ content: `${amount} mesaj silindi.`, ephemeral: true });
     } catch (e) {
-      await interaction.reply({ content: `Hata: ${e.message} (14 günden eski mesajlar silinemez)`, ephemeral: true });
+      await interaction.reply({ content: 'Mesajlar silinemedi. 14 günden eski mesajlar toplu silinemez.', ephemeral: true });
     }
   },
 };
