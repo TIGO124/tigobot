@@ -34,8 +34,8 @@ async function handleMention(message) {
   const yaziyor = setInterval(() => message.channel.sendTyping().catch(() => {}), 8000);
   try {
     const model = getGuildModel(message.guildId);
-    const { text, model: kullanilan, fallback } = await chatWithFallback(model, defaultNvidia(), [{ role: 'user', content: soru }]);
-    const embeds = aiEmbeds(kullanilan, text, fallback);
+    const { text, model: kullanilan, note } = await chatWithFallback(model, defaultNvidia(), [{ role: 'user', content: soru }]);
+    const embeds = aiEmbeds(kullanilan, text, note);
     await message.reply({ embeds: [embeds[0]] });
     for (const e of embeds.slice(1)) {
       await message.channel.send({ embeds: [e] });

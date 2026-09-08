@@ -6,11 +6,10 @@ function allModels() {
   return [
     { key: 'qwen35-4b', name: 'Qwen3.5-4B (yerel)', kind: 'local', model: process.env.AI_MODEL_4B || 'Qwen3.5-4B' },
     { key: 'qwen35-9b', name: 'Qwen3.5-9B (yerel)', kind: 'local', model: process.env.AI_MODEL_9B || 'Qwen3.5-9B' },
-    { key: 'nvidia-nemotron-70b', name: 'nvidia Nemotron-70B', kind: 'nvidia', model: 'nvidia/llama-3.1-nemotron-70b-instruct' },
-    { key: 'nvidia-llama33-70b', name: 'nvidia Llama-3.3-70B', kind: 'nvidia', model: 'meta/llama-3.3-70b-instruct' },
-    { key: 'nvidia-deepseek-r1', name: 'nvidia DeepSeek-R1', kind: 'nvidia', model: 'deepseek-ai/deepseek-r1' },
-    { key: 'nvidia-qwen-coder', name: 'nvidia Qwen2.5-Coder-32B', kind: 'nvidia', model: 'qwen/qwen2.5-coder-32b-instruct' },
-    { key: 'nvidia-mixtral', name: 'nvidia Mixtral-8x22B', kind: 'nvidia', model: 'mistralai/mixtral-8x22b-instruct-v0.1' },
+    { key: 'nvidia-gpt-oss', name: 'nvidia GPT-OSS-20B', kind: 'nvidia', model: 'openai/gpt-oss-20b' },
+    { key: 'nvidia-mistral-nemotron', name: 'nvidia Mistral-Nemotron', kind: 'nvidia', model: 'mistralai/mistral-nemotron' },
+    { key: 'nvidia-llama-vision', name: 'nvidia Llama-3.2-11B', kind: 'nvidia', model: 'meta/llama-3.2-11b-vision-instruct' },
+    { key: 'nvidia-lightning', name: 'nvidia Nemotron-Lightning-30B', kind: 'nvidia', model: 'nvidia/nemotron-3.5-lightning-30b-a3b' },
   ];
 }
 

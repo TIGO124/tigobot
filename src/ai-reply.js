@@ -2,8 +2,8 @@ const { EmbedBuilder } = require('discord.js');
 const { splitText } = require('./ai');
 
 // Cevap embedleri: altta "Model: <ad>" etiketi, yedekse üstte bilgi satırı.
-function aiEmbeds(model, text, fallback) {
-  const on = fallback ? 'Yerel servise şu anda ulaşılamıyor, yedek model ile cevaplanıyor.\n\n' : '';
+function aiEmbeds(model, text, note) {
+  const on = note ? `${note}\n\n` : '';
   return splitText(on + text, 4000).map(p =>
     new EmbedBuilder()
       .setDescription(p)

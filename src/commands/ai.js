@@ -22,8 +22,8 @@ module.exports = {
     await interaction.deferReply();
     try {
       const model = getGuildModel(interaction.guildId);
-      const { text, model: kullanilan, fallback } = await chatWithFallback(model, defaultNvidia(), [{ role: 'user', content: soru }]);
-      const embeds = aiEmbeds(kullanilan, text, fallback);
+      const { text, model: kullanilan, note } = await chatWithFallback(model, defaultNvidia(), [{ role: 'user', content: soru }]);
+      const embeds = aiEmbeds(kullanilan, text, note);
       await interaction.editReply({ embeds: [embeds[0]] });
       for (const e of embeds.slice(1)) {
         await interaction.followUp({ embeds: [e] });
