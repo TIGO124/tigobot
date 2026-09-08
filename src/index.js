@@ -4,6 +4,7 @@ const path = require('path');
 const { Client, Collection, GatewayIntentBits, Events } = require('discord.js');
 const handleButton = require('./buttons');
 const { updateCounter } = require('./counter');
+const { sanitize } = require('./sanitize');
 
 const client = new Client({
   intents: [
@@ -71,6 +72,6 @@ if (!process.env.TOKEN) {
 }
 
 client.login(process.env.TOKEN).catch(err => {
-  console.error('Discord girişi başarısız. TOKEN yanlış olabilir (Bot sekmesindeki token olmalı, Uygulama ID değil):', err.message);
+  console.error('Discord girişi başarısız. TOKEN yanlış olabilir (Bot sekmesindeki token olmalı, Uygulama ID değil):', sanitize(err.message));
   process.exit(1);
 });

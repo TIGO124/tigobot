@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const { allModels, getGuildModel, setGuildModel } = require('../ai-models');
 
 module.exports = {
@@ -26,6 +26,9 @@ module.exports = {
         .setColor(0x5865F2)
         .setTimestamp();
       return interaction.reply({ embeds: [embed] });
+    }
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+      return interaction.reply({ content: 'Modeli sadece sunucuyu yönetenler değiştirebilir. Mevcut modeli görmek için /aimodels yazman yeterli.', ephemeral: true });
     }
     const m = setGuildModel(interaction.guildId, key);
     await interaction.reply(

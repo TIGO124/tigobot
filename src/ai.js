@@ -2,6 +2,7 @@
 // - kind 'local'  -> PC'deki Ollama (AI_BASE_URL), NVIDIA key kullanılmaz.
 // - kind 'nvidia' -> NVIDIA API, sadece NVIDIA_API_KEY kullanılır.
 const NVIDIA_BASE = 'https://integrate.api.nvidia.com/v1';
+const { sanitize } = require('./sanitize');
 
 async function callOpenAI(base, apiKey, model, messages) {
   const headers = { 'Content-Type': 'application/json' };
@@ -14,7 +15,7 @@ async function callOpenAI(base, apiKey, model, messages) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`AI hatası (${res.status}): ${body.slice(0, 200)}`);
+    throw new Error(sanitize(`AI hatası (${res.status}): ${body.slice(0, 200)}`));
   }
   const data = await res.json();
   const text = data.choices && data.choices[0] && data.choices[0].message
