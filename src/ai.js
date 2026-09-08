@@ -4,6 +4,7 @@
 // - Yerel servise ulaşılamazsa LOCAL_UNREACHABLE hatası verir (yedek için).
 // - Tüm istekler tek kuyruktan FIFO sırayla geçer.
 const { sanitize } = require('./sanitize');
+const { acikMi } = require('./local');
 
 const NVIDIA_BASE = 'https://integrate.api.nvidia.com/v1';
 const SYSTEM_PROMPT = 'Sen TigoBot adında, Türkçe konuşan, yardımsever ve öz cevaplar veren bir Discord botusun.';
@@ -48,8 +49,8 @@ async function chat(model, messages) {
     return callOpenAI(NVIDIA_BASE, process.env.NVIDIA_API_KEY, model.model, tum, 180000);
   }
   const base = (process.env.AI_BASE_URL || '').replace(/\/+$/, '');
-  if (!base) {
-    // Tünel adresi yoksa yerel servis kapalı sayılır -> nvidia yedeğe düşer
+  if (!acikMi() || !base) {
+    // Kapalıysa veya tünel adresi yoksa yerel servis kapalı sayılır -> nvidia yedeğe düşer
     const err = new Error('LOCAL_UNREACHABLE');
     err.code = 'LOCAL_UNREACHABLE';
     throw err;

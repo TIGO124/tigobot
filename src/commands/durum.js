@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { getGuildModel } = require('../ai-models');
+const { acikMi } = require('../local');
 
 async function yerelKontrol() {
   const base = (process.env.AI_BASE_URL || '').replace(/\/+$/, '');
@@ -29,6 +30,7 @@ module.exports = {
       .setColor(0x5865F2)
       .addFields(
         { name: 'Aktif model', value: model.name },
+        { name: 'Yerel anahtar', value: acikMi() ? 'Açık' : 'Kapalı (/local kapat ile kapatılmış)' },
         { name: 'Yerel (senin PC)', value: yerel.durum + (yerel.modeller.length ? `\nModeller: ${yerel.modeller.slice(0, 5).join(', ')}` : '') },
         { name: 'NVIDIA', value: nvidiaKey ? 'Key ayarlı' : 'Key ayarlı değil' },
       )

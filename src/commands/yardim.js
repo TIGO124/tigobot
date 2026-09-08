@@ -24,6 +24,7 @@ module.exports = {
         { name: '/tepki-rol-kur /sayac-kur', value: 'Rol + sayaç kurulumu', inline: true },
         { name: '/ai /aimodels', value: 'Yapay zeka soru + model seçimi', inline: true },
         { name: '/durum', value: 'AI servis durumu', inline: true },
+        { name: '/local', value: 'Yerel AI aç/kapat (sahip)', inline: true },
         { name: '/trust', value: 'Beklemeden muaf listesi (sahip)', inline: true },
       )
       .setFooter({ text: 'Otomatik: hoşgeldin mesajı + küfür/link filtresi + ismiyle seslenince cevap' })
