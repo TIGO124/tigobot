@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "deploy": "node src/deploy-commands.js",
-    "deploy:https": "node src/deploy-https.js"
+    "deploy:https": "node src/deploy-https.js",
+    "clear-global": "node src/clear-global.js"
   },
   "engines": {
     "node": "20.x"
