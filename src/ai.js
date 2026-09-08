@@ -119,14 +119,17 @@ async function uretimYap(model, yedekModel, messages) {
   }
 }
 
-// Kredi/spam koruması: kullanıcı başına bekleme süresi
+// Kredi/spam koruması: sunucu başına kullanıcı bekleme süresi
 const bekleme = new Map();
-function cooldownLeft(userId) {
-  const kalan = BEKLEME_MS - (Date.now() - (bekleme.get(userId) || 0));
+function anahtar(userId, guildId) {
+  return guildId ? `${guildId}:${userId}` : `dm:${userId}`;
+}
+function cooldownLeft(userId, guildId) {
+  const kalan = BEKLEME_MS - (Date.now() - (bekleme.get(anahtar(userId, guildId)) || 0));
   return kalan > 0 ? Math.ceil(kalan / 1000) : 0;
 }
-function markCooldown(userId) {
-  bekleme.set(userId, Date.now());
+function markCooldown(userId, guildId) {
+  bekleme.set(anahtar(userId, guildId), Date.now());
 }
 
 function splitText(text, max = 2000) {

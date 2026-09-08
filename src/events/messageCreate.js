@@ -25,12 +25,12 @@ async function handleMention(message) {
   }
   const sahipMi = message.guild?.ownerId === message.author.id;
   if (!guvenilirMi(message.guildId, message.author.id, sahipMi)) {
-    const kalan = cooldownLeft(message.author.id);
+    const kalan = cooldownLeft(message.author.id, message.guildId);
     if (kalan > 0) {
       await message.reply(`Biraz yavaş. ${kalan} saniye sonra tekrar dene.`);
       return true;
     }
-    markCooldown(message.author.id);
+    markCooldown(message.author.id, message.guildId);
   }
 
   const model = getGuildModel(message.guildId);

@@ -6,9 +6,15 @@ function liste(guildId) {
   return Array.isArray(map[guildId]) ? map[guildId] : [];
 }
 
+// Bot sahibi (OWNER_ID) her sunucuda muaf.
+function botSahibiMi(userId) {
+  return Boolean(process.env.OWNER_ID) && userId === process.env.OWNER_ID;
+}
+
 // Sunucu sahibi her zaman muaf; listedekiler de muaf.
 function guvenilirMi(guildId, userId, sahipMi) {
   if (sahipMi) return true;
+  if (botSahibiMi(userId)) return true;
   if (!guildId || !userId) return false;
   return liste(guildId).includes(userId);
 }
@@ -34,4 +40,4 @@ function guvenKaldir(guildId, userId) {
   return true;
 }
 
-module.exports = { liste, guvenilirMi, guvenEkle, guvenKaldir };
+module.exports = { liste, guvenilirMi, guvenEkle, guvenKaldir, botSahibiMi };

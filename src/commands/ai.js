@@ -17,11 +17,11 @@ module.exports = {
     }
     const sahipMi = interaction.guild?.ownerId === interaction.user.id;
     if (!guvenilirMi(interaction.guildId, interaction.user.id, sahipMi)) {
-      const kalan = cooldownLeft(interaction.user.id);
-      if (kalan > 0) {
-        return interaction.reply({ content: `Biraz yavaş. ${kalan} saniye sonra tekrar dene.`, ephemeral: true });
-      }
-      markCooldown(interaction.user.id);
+    const kalan = cooldownLeft(interaction.user.id, interaction.guildId);
+    if (kalan > 0) {
+      return interaction.reply({ content: `Biraz yavaş. ${kalan} saniye sonra tekrar dene.`, ephemeral: true });
+    }
+    markCooldown(interaction.user.id, interaction.guildId);
     }
     const model = getGuildModel(interaction.guildId);
     const baslangic = animMetni(0);
