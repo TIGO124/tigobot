@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { getGuildModel, defaultNvidia } = require('../ai-models');
 const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
+const { guvenilirMi } = require('../trust');
 const { sanitize } = require('../sanitize');
 const { aiAkis, durumEmbed, animMetni } = require('../ai-progress');
 
@@ -14,11 +15,14 @@ module.exports = {
     if (soru.length > MAX_SORU) {
       return interaction.reply({ content: `Soru çok uzun (en fazla ${MAX_SORU} karakter).`, ephemeral: true });
     }
-    const kalan = cooldownLeft(interaction.user.id);
-    if (kalan > 0) {
-      return interaction.reply({ content: `Biraz yavaş. ${kalan} saniye sonra tekrar dene.`, ephemeral: true });
+    const sahipMi = interaction.guild?.ownerId === interaction.user.id;
+    if (!guvenilirMi(interaction.guildId, interaction.user.id, sahipMi)) {
+      const kalan = cooldownLeft(interaction.user.id);
+      if (kalan > 0) {
+        return interaction.reply({ content: `Biraz yavaş. ${kalan} saniye sonra tekrar dene.`, ephemeral: true });
+      }
+      markCooldown(interaction.user.id);
     }
-    markCooldown(interaction.user.id);
     const model = getGuildModel(interaction.guildId);
     const baslangic = animMetni(0);
     await interaction.deferReply();

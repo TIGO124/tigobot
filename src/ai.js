@@ -7,7 +7,7 @@ const { sanitize } = require('./sanitize');
 
 const NVIDIA_BASE = 'https://integrate.api.nvidia.com/v1';
 const SYSTEM_PROMPT = 'Sen TigoBot adında, Türkçe konuşan, yardımsever ve öz cevaplar veren bir Discord botusun.';
-const BEKLEME_MS = 5 * 1000;
+const BEKLEME_MS = 15 * 1000;
 const MAX_SORU = 1000;
 
 async function callOpenAI(base, apiKey, model, messages, timeoutMs) {

@@ -2,6 +2,7 @@ const { Events, PermissionFlagsBits } = require('discord.js');
 const config = require('../config');
 const { getGuildModel, defaultNvidia } = require('../ai-models');
 const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
+const { guvenilirMi } = require('../trust');
 const { aiAkis, durumEmbed, animMetni } = require('../ai-progress');
 
 // İsmi geçen veya etiketlenen mesajlarda bota soru sorulmuş sayılır.
@@ -22,12 +23,15 @@ async function handleMention(message) {
     await message.reply(`Sorun çok uzun (en fazla ${MAX_SORU} karakter).`);
     return true;
   }
-  const kalan = cooldownLeft(message.author.id);
-  if (kalan > 0) {
-    await message.reply(`Biraz yavaş. ${kalan} saniye sonra tekrar dene.`);
-    return true;
+  const sahipMi = message.guild?.ownerId === message.author.id;
+  if (!guvenilirMi(message.guildId, message.author.id, sahipMi)) {
+    const kalan = cooldownLeft(message.author.id);
+    if (kalan > 0) {
+      await message.reply(`Biraz yavaş. ${kalan} saniye sonra tekrar dene.`);
+      return true;
+    }
+    markCooldown(message.author.id);
   }
-  markCooldown(message.author.id);
 
   const model = getGuildModel(message.guildId);
   const baslangic = animMetni(0);
