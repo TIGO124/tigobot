@@ -1,9 +1,8 @@
 const { Events, PermissionFlagsBits } = require('discord.js');
 const config = require('../config');
 const { getGuildModel, defaultNvidia } = require('../ai-models');
-const { chatWithFallback, cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
-const { sanitize } = require('../sanitize');
-const { aiEmbeds } = require('../ai-reply');
+const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
+const { aiAkis, durumEmbed, animMetni } = require('../ai-progress');
 
 // İsmi geçen veya etiketlenen mesajlarda bota soru sorulmuş sayılır.
 // Örnek: "nasılsın tigo" -> soru "nasılsın" olur.
@@ -30,21 +29,24 @@ async function handleMention(message) {
   }
   markCooldown(message.author.id);
 
-  await message.channel.sendTyping().catch(() => {});
-  const yaziyor = setInterval(() => message.channel.sendTyping().catch(() => {}), 8000);
+  const model = getGuildModel(message.guildId);
+  const baslangic = animMetni(0);
+  let mesaj;
   try {
-    const model = getGuildModel(message.guildId);
-    const { text, model: kullanilan, note } = await chatWithFallback(model, defaultNvidia(), [{ role: 'user', content: soru }]);
-    const embeds = aiEmbeds(kullanilan, text, note);
-    await message.reply({ embeds: [embeds[0]] });
-    for (const e of embeds.slice(1)) {
-      await message.channel.send({ embeds: [e] });
-    }
-  } catch (e) {
-    await message.reply(`Hata: ${sanitize(e.message)}`.slice(0, 2000));
-  } finally {
-    clearInterval(yaziyor);
+    mesaj = await message.reply({ embeds: [durumEmbed(baslangic, model.name)] });
+  } catch {
+    return true;
   }
+  await aiAkis({
+    mesaj,
+    ekGonder: o => message.channel.send(o),
+    userId: message.author.id,
+    userTag: message.author.tag,
+    model,
+    yedek: defaultNvidia(),
+    soru,
+    baslangic,
+  });
   return true;
 }
 

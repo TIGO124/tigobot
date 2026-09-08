@@ -66,32 +66,56 @@ async function chat(model, messages) {
   }
 }
 
-// FIFO kuyruk: bir istek bitmeden diğeri başlamaz.
-let kuyruk = Promise.resolve();
-function enqueue(is) {
-  const calis = kuyruk.then(is, is);
-  kuyruk = calis.catch(() => {});
-  return calis;
+// Global FIFO kuyruk: TÜM modellerde (yerel 4B/9B + nvidia) aynı anda tek üretim.
+// Tek PC olduğu için farklı modeller bile aynı anda çalışamaz, herkes sıraya girer.
+const bekleyenler = [];
+let aktifIs = null;
+let isSayaci = 0;
+
+function siradaki() {
+  if (aktifIs) return;
+  const job = bekleyenler.shift();
+  if (!job) return;
+  aktifIs = job;
+  job.is().then(
+    sonuc => { aktifIs = null; job.resolve(sonuc); siradaki(); },
+    hata => { aktifIs = null; job.reject(hata); siradaki(); }
+  );
 }
 
-function chatWithFallback(model, yedekModel, messages) {
-  return enqueue(async () => {
-    try {
-      const text = await chat(model, messages);
-      return { text, model, fallback: false, note: '' };
-    } catch (e) {
-      if (e && e.code === 'LOCAL_UNREACHABLE') {
-        const text = await chat(yedekModel, messages);
-        return { text, model: yedekModel, fallback: true, note: '' };
-      }
-      // Seçili nvidia model hesaba kapalıysa (404) varsayılan modele düş
-      if (model.kind === 'nvidia' && /\(404\)/.test(e.message || '') && model.key !== yedekModel.key) {
-        const text = await chat(yedekModel, messages);
-        return { text, model: yedekModel, fallback: true, note: 'Seçili modele şu anda ulaşılamıyor, yedek model ile cevaplanıyor.' };
-      }
-      throw e;
+// Üretim işini kuyruğa ekler. Dönen jobId ile sıra takibi yapılır.
+function kuyrugaEkle(userId, userTag, modelAdi, is) {
+  const job = { id: ++isSayaci, userId, userTag, modelAdi, is, resolve: null, reject: null };
+  const sonuc = new Promise((resolve, reject) => { job.resolve = resolve; job.reject = reject; });
+  bekleyenler.push(job);
+  siradaki();
+  return { jobId: job.id, sonuc };
+}
+
+// { sira, toplam } — sıra 1 = şu an üretiliyor. İş bitmiş/kalmamışsa null.
+function siraBilgisi(jobId) {
+  if (aktifIs && aktifIs.id === jobId) return { sira: 1, toplam: bekleyenler.length + 1 };
+  const idx = bekleyenler.findIndex(j => j.id === jobId);
+  if (idx === -1) return null;
+  return { sira: idx + 2, toplam: bekleyenler.length + 1 };
+}
+
+async function uretimYap(model, yedekModel, messages) {
+  try {
+    const text = await chat(model, messages);
+    return { text, model, note: '' };
+  } catch (e) {
+    if (e && e.code === 'LOCAL_UNREACHABLE') {
+      const text = await chat(yedekModel, messages);
+      return { text, model: yedekModel, note: '' };
     }
-  });
+    // Seçili nvidia model hesaba kapalıysa (404) varsayılan modele düş
+    if (model.kind === 'nvidia' && /\(404\)/.test(e.message || '') && model.key !== yedekModel.key) {
+      const text = await chat(yedekModel, messages);
+      return { text, model: yedekModel, note: 'Seçili modele şu anda ulaşılamıyor, yedek model ile cevaplanıyor.' };
+    }
+    throw e;
+  }
 }
 
 // Kredi/spam koruması: kullanıcı başına bekleme süresi
@@ -117,4 +141,4 @@ function splitText(text, max = 2000) {
   return parts;
 }
 
-module.exports = { chat, chatWithFallback, enqueue, splitText, cooldownLeft, markCooldown, MAX_SORU };
+module.exports = { chat, uretimYap, kuyrugaEkle, siraBilgisi, splitText, cooldownLeft, markCooldown, MAX_SORU };

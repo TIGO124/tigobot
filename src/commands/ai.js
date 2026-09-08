@@ -1,8 +1,8 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { getGuildModel, defaultNvidia } = require('../ai-models');
-const { chatWithFallback, cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
+const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
 const { sanitize } = require('../sanitize');
-const { aiEmbeds } = require('../ai-reply');
+const { aiAkis, durumEmbed, animMetni } = require('../ai-progress');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -19,17 +19,19 @@ module.exports = {
       return interaction.reply({ content: `Biraz yavaş. ${kalan} saniye sonra tekrar dene.`, ephemeral: true });
     }
     markCooldown(interaction.user.id);
+    const model = getGuildModel(interaction.guildId);
+    const baslangic = animMetni(0);
     await interaction.deferReply();
-    try {
-      const model = getGuildModel(interaction.guildId);
-      const { text, model: kullanilan, note } = await chatWithFallback(model, defaultNvidia(), [{ role: 'user', content: soru }]);
-      const embeds = aiEmbeds(kullanilan, text, note);
-      await interaction.editReply({ embeds: [embeds[0]] });
-      for (const e of embeds.slice(1)) {
-        await interaction.followUp({ embeds: [e] });
-      }
-    } catch (e) {
-      await interaction.editReply(`Hata: ${sanitize(e.message)}`.slice(0, 2000));
-    }
+    const mesaj = await interaction.editReply({ embeds: [durumEmbed(baslangic, model.name)] });
+    await aiAkis({
+      mesaj,
+      ekGonder: o => interaction.followUp(o),
+      userId: interaction.user.id,
+      userTag: interaction.user.tag,
+      model,
+      yedek: defaultNvidia(),
+      soru,
+      baslangic,
+    });
   },
 };
