@@ -17,6 +17,11 @@ module.exports = {
         { name: '/timeout', value: 'Üyeyi susturur (dk)', inline: true },
         { name: '/kick', value: 'Üyeyi atar', inline: true },
         { name: '/ban', value: 'Üyeyi yasaklar', inline: true },
+        { name: '/zar /yazi-tura /8ball', value: 'Eğlence', inline: true },
+        { name: '/ask-olcer /espri', value: 'Eğlence', inline: true },
+        { name: '/anket /hatirlatici', value: 'Araçlar', inline: true },
+        { name: '/kanal-olustur /kategori-olustur /rol-olustur', value: 'Sunucu yönetimi', inline: true },
+        { name: '/tepki-rol-kur /sayac-kur', value: 'Rol + sayaç kurulumu', inline: true },
       )
       .setFooter({ text: 'Otomatik: hoşgeldin mesajı + küfür/link filtresi' })
       .setTimestamp();

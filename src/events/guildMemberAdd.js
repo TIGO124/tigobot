@@ -1,4 +1,5 @@
 const { Events, EmbedBuilder } = require('discord.js');
+const { updateCounter } = require('../counter');
 
 module.exports = {
   name: Events.GuildMemberAdd,
@@ -29,5 +30,14 @@ module.exports = {
     try {
       await member.send(`**${member.guild.name}** sunucusuna hoş geldin!\nKuralları okuyup keyifli sohbetler dileriz.`);
     } catch {}
+
+    // Oto-rol (.env içinde AUTO_ROLE_ID varsa)
+    if (process.env.AUTO_ROLE_ID) {
+      try {
+        await member.roles.add(process.env.AUTO_ROLE_ID);
+      } catch {}
+    }
+
+    await updateCounter(member.guild);
   },
 };

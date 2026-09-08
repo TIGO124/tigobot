@@ -2,6 +2,8 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { Client, Collection, GatewayIntentBits, Events } = require('discord.js');
+const handleButton = require('./buttons');
+const { updateCounter } = require('./counter');
 
 const client = new Client({
   intents: [
@@ -32,9 +34,22 @@ for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
 
 client.once(Events.ClientReady, c => {
   console.log(`Giriş yapıldı: ${c.user.tag}`);
+  // Sayaç kanalını 10 dakikada bir tazele
+  setInterval(() => {
+    c.guilds.cache.forEach(g => updateCounter(g).catch(() => {}));
+  }, 10 * 60 * 1000);
 });
 
 client.on(Events.InteractionCreate, async interaction => {
+  if (interaction.isButton()) {
+    try {
+      await handleButton(interaction);
+    } catch (e) {
+      console.error(e);
+      await interaction.reply({ content: 'İşlem sırasında hata oluştu!', ephemeral: true }).catch(() => {});
+    }
+    return;
+  }
   if (!interaction.isChatInputCommand()) return;
   const cmd = client.commands.get(interaction.commandName);
   if (!cmd) return;
