@@ -1,17 +1,23 @@
 // OpenAI-uyumlu sohbet istemcisi.
 // - kind 'local'  -> PC'deki Ollama (AI_BASE_URL), NVIDIA key kullanılmaz.
 // - kind 'nvidia' -> NVIDIA API, sadece NVIDIA_API_KEY kullanılır.
-const NVIDIA_BASE = 'https://integrate.api.nvidia.com/v1';
+// - Yerel servise ulaşılamazsa LOCAL_UNREACHABLE hatası verir (yedek için).
+// - Tüm istekler tek kuyruktan FIFO sırayla geçer.
 const { sanitize } = require('./sanitize');
 
-async function callOpenAI(base, apiKey, model, messages) {
+const NVIDIA_BASE = 'https://integrate.api.nvidia.com/v1';
+const SYSTEM_PROMPT = 'Sen TigoBot adında, Türkçe konuşan, yardımsever ve öz cevaplar veren bir Discord botusun.';
+const BEKLEME_MS = 20 * 1000;
+const MAX_SORU = 1000;
+
+async function callOpenAI(base, apiKey, model, messages, timeoutMs) {
   const headers = { 'Content-Type': 'application/json' };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
   const res = await fetch(`${base}/chat/completions`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 1024 }),
-    signal: AbortSignal.timeout(180000),
+    signal: AbortSignal.timeout(timeoutMs || 180000),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
@@ -25,18 +31,69 @@ async function callOpenAI(base, apiKey, model, messages) {
   return text;
 }
 
+function erisilemezMi(e) {
+  if (!e) return false;
+  if (e.code === 'LOCAL_UNREACHABLE') return true;
+  if (e.name === 'TimeoutError' || e.name === 'AbortError') return true;
+  if (e instanceof TypeError) return true;
+  return /fetch failed|connect|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|timeout/i.test(e.message || '');
+}
+
 async function chat(model, messages) {
+  const tum = [{ role: 'system', content: SYSTEM_PROMPT }, ...messages];
   if (model.kind === 'nvidia') {
     if (!process.env.NVIDIA_API_KEY) {
       throw new Error('NVIDIA_API_KEY ayarlı değil. Railway Variables kısmına ekle.');
     }
-    return callOpenAI(NVIDIA_BASE, process.env.NVIDIA_API_KEY, model.model, messages);
+    return callOpenAI(NVIDIA_BASE, process.env.NVIDIA_API_KEY, model.model, tum, 180000);
   }
   const base = (process.env.AI_BASE_URL || '').replace(/\/+$/, '');
   if (!base) {
     throw new Error('Yerel model için AI_BASE_URL ayarlı değil. PCndeki tünel adresini Railway Variables kısmına AI_BASE_URL olarak ekle.');
   }
-  return callOpenAI(base, process.env.LOCAL_API_KEY || null, model.model, messages);
+  try {
+    return await callOpenAI(base, process.env.LOCAL_API_KEY || null, model.model, tum, 60000);
+  } catch (e) {
+    if (erisilemezMi(e)) {
+      const err = new Error('LOCAL_UNREACHABLE');
+      err.code = 'LOCAL_UNREACHABLE';
+      throw err;
+    }
+    throw e;
+  }
+}
+
+// FIFO kuyruk: bir istek bitmeden diğeri başlamaz.
+let kuyruk = Promise.resolve();
+function enqueue(is) {
+  const calis = kuyruk.then(is, is);
+  kuyruk = calis.catch(() => {});
+  return calis;
+}
+
+function chatWithFallback(model, yedekModel, messages) {
+  return enqueue(async () => {
+    try {
+      const text = await chat(model, messages);
+      return { text, model, fallback: false };
+    } catch (e) {
+      if (e && e.code === 'LOCAL_UNREACHABLE') {
+        const text = await chat(yedekModel, messages);
+        return { text, model: yedekModel, fallback: true };
+      }
+      throw e;
+    }
+  });
+}
+
+// Kredi/spam koruması: kullanıcı başına bekleme süresi
+const bekleme = new Map();
+function cooldownLeft(userId) {
+  const kalan = BEKLEME_MS - (Date.now() - (bekleme.get(userId) || 0));
+  return kalan > 0 ? Math.ceil(kalan / 1000) : 0;
+}
+function markCooldown(userId) {
+  bekleme.set(userId, Date.now());
 }
 
 function splitText(text, max = 2000) {
@@ -52,4 +109,4 @@ function splitText(text, max = 2000) {
   return parts;
 }
 
-module.exports = { chat, splitText };
+module.exports = { chat, chatWithFallback, enqueue, splitText, cooldownLeft, markCooldown, MAX_SORU };

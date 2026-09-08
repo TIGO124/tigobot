@@ -24,7 +24,7 @@ module.exports = {
         { name: '/tepki-rol-kur /sayac-kur', value: 'Rol + sayaç kurulumu', inline: true },
         { name: '/ai /aimodels', value: 'Yapay zeka soru + model seçimi', inline: true },
       )
-      .setFooter({ text: 'Otomatik: hoşgeldin mesajı + küfür/link filtresi' })
+      .setFooter({ text: 'Otomatik: hoşgeldin mesajı + küfür/link filtresi + ismiyle seslenince cevap' })
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });

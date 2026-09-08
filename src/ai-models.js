@@ -30,4 +30,9 @@ function setGuildModel(guildId, key) {
   return findModel(key);
 }
 
-module.exports = { allModels, findModel, getGuildModel, setGuildModel };
+// Yerel servis kapalıyken cevap verecek yedek: listedeki ilk nvidia modeli
+function defaultNvidia() {
+  return allModels().find(m => m.kind === 'nvidia') || allModels()[0];
+}
+
+module.exports = { allModels, findModel, getGuildModel, setGuildModel, defaultNvidia };

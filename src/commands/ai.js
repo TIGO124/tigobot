@@ -1,12 +1,8 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { getGuildModel } = require('../ai-models');
-const { chat, splitText } = require('../ai');
+const { getGuildModel, defaultNvidia } = require('../ai-models');
+const { chatWithFallback, cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
 const { sanitize } = require('../sanitize');
-
-// Kredi yakmayı ve spamı önlemek için kullanıcı başına bekleme süresi
-const bekleme = new Map();
-const BEKLEME_MS = 20 * 1000;
-const MAX_SORU = 1000;
+const { aiEmbeds } = require('../ai-reply');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -18,21 +14,19 @@ module.exports = {
     if (soru.length > MAX_SORU) {
       return interaction.reply({ content: `Soru çok uzun (en fazla ${MAX_SORU} karakter).`, ephemeral: true });
     }
-    const simdi = Date.now();
-    const son = bekleme.get(interaction.user.id) || 0;
-    if (simdi - son < BEKLEME_MS) {
-      const kalan = Math.ceil((BEKLEME_MS - (simdi - son)) / 1000);
+    const kalan = cooldownLeft(interaction.user.id);
+    if (kalan > 0) {
       return interaction.reply({ content: `Biraz yavaş. ${kalan} saniye sonra tekrar dene.`, ephemeral: true });
     }
-    bekleme.set(interaction.user.id, simdi);
+    markCooldown(interaction.user.id);
     await interaction.deferReply();
     try {
       const model = getGuildModel(interaction.guildId);
-      const cevap = await chat(model, [{ role: 'user', content: soru }]);
-      const parts = splitText(`**${model.name}**\n${cevap}`);
-      await interaction.editReply(parts[0].slice(0, 2000));
-      for (const p of parts.slice(1)) {
-        await interaction.followUp(p.slice(0, 2000));
+      const { text, model: kullanilan, fallback } = await chatWithFallback(model, defaultNvidia(), [{ role: 'user', content: soru }]);
+      const embeds = aiEmbeds(kullanilan, text, fallback);
+      await interaction.editReply({ embeds: [embeds[0]] });
+      for (const e of embeds.slice(1)) {
+        await interaction.followUp({ embeds: [e] });
       }
     } catch (e) {
       await interaction.editReply(`Hata: ${sanitize(e.message)}`.slice(0, 2000));
