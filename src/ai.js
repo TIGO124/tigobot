@@ -82,7 +82,7 @@ function chatWithFallback(model, yedekModel, messages) {
     } catch (e) {
       if (e && e.code === 'LOCAL_UNREACHABLE') {
         const text = await chat(yedekModel, messages);
-        return { text, model: yedekModel, fallback: true, note: 'Yerel servise şu anda ulaşılamıyor, yedek model ile cevaplanıyor.' };
+        return { text, model: yedekModel, fallback: true, note: '' };
       }
       // Seçili nvidia model hesaba kapalıysa (404) varsayılan modele düş
       if (model.kind === 'nvidia' && /\(404\)/.test(e.message || '') && model.key !== yedekModel.key) {
