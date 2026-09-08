@@ -67,7 +67,8 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, model, yedek, soru, ba
   );
   let animI = 1;
   let sonMetin = baslangic || null;
-  const timer = setInterval(async () => {
+  let bitti = false;
+  const guncelle = async () => {
     try {
       const b = siraBilgisi(jobId);
       const metin = !b || b.sira <= 1 ? animMetni(animI++) : kuyrukMetni(b.sira, b.toplam);
@@ -76,12 +77,18 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, model, yedek, soru, ba
         await mesaj.edit({ embeds: [durumEmbed(metin, model.name)] });
       }
     } catch {}
-  }, 2000);
+  };
+  // Kısa beklemelerde sıra göstergesi yetişsin diye erken ilk kontrol
+  await sleep(700);
+  if (!bitti) await guncelle();
+  const timer = setInterval(async () => { if (!bitti) await guncelle(); }, 2000);
   try {
     const { text, model: kullanilan, note } = await sonuc;
+    bitti = true;
     clearInterval(timer);
     await kademeliGoster(mesaj, ekGonder, kullanilan.name, (note ? note + '\n\n' : '') + text);
   } catch (e) {
+    bitti = true;
     clearInterval(timer);
     await mesaj.edit(`Hata: ${sanitize(e.message)}`.slice(0, 2000)).catch(() => {});
   }
