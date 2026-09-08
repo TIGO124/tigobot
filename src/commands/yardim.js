@@ -22,6 +22,7 @@ module.exports = {
         { name: '/anket /hatirlatici', value: 'Araçlar', inline: true },
         { name: '/kanal-olustur /kategori-olustur /rol-olustur', value: 'Sunucu yönetimi', inline: true },
         { name: '/tepki-rol-kur /sayac-kur', value: 'Rol + sayaç kurulumu', inline: true },
+        { name: '/ai /aimodels', value: 'Yapay zeka soru + model seçimi', inline: true },
       )
       .setFooter({ text: 'Otomatik: hoşgeldin mesajı + küfür/link filtresi' })
       .setTimestamp();
