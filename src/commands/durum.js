@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { getGuildModel } = require('../ai-models');
+const { getUserModel } = require('../ai-models');
 const { acikMi } = require('../local');
 
 async function yerelKontrol() {
@@ -22,7 +22,7 @@ module.exports = {
     .setDescription('AI servisinin durumunu gösterir (yerel + nvidia)'),
   async execute(interaction) {
     await interaction.deferReply();
-    const model = getGuildModel(interaction.guildId);
+    const model = getUserModel(interaction.user.id);
     const yerel = await yerelKontrol();
     const nvidiaKey = Boolean(process.env.NVIDIA_API_KEY);
     const embed = new EmbedBuilder()

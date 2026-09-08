@@ -21,17 +21,17 @@ function defaultModel() {
   return allModels()[0];
 }
 
-function getGuildModel(guildId) {
+function getUserModel(userId) {
   const map = load('aimodel.json', {});
-  return findModel(map[guildId]) || defaultModel();
+  return findModel(map[userId]) || defaultModel();
 }
 
 // Sadece geçerli anahtar kaydedilir; geçersizse null döner (hayalet kayıt yok)
-function setGuildModel(guildId, key) {
+function setUserModel(userId, key) {
   const m = findModel(key);
   if (!m) return null;
   const map = load('aimodel.json', {});
-  map[guildId] = m.key;
+  map[userId] = m.key;
   save('aimodel.json', map);
   return m;
 }
@@ -41,4 +41,4 @@ function defaultNvidia() {
   return allModels().find(m => m.kind === 'nvidia') || allModels()[0];
 }
 
-module.exports = { allModels, findModel, getGuildModel, setGuildModel, defaultModel, defaultNvidia };
+module.exports = { allModels, findModel, getUserModel, setUserModel, defaultModel, defaultNvidia };

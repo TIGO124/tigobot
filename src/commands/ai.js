@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { getGuildModel, defaultNvidia } = require('../ai-models');
+const { getUserModel, defaultNvidia } = require('../ai-models');
 const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
 const { guvenilirMi } = require('../trust');
 const { sanitize } = require('../sanitize');
@@ -23,7 +23,7 @@ module.exports = {
     }
     markCooldown(interaction.user.id, interaction.guildId);
     }
-    const model = getGuildModel(interaction.guildId);
+    const model = getUserModel(interaction.user.id);
     const baslangic = animMetni(0);
     await interaction.deferReply();
     const mesaj = await interaction.editReply({ embeds: [durumEmbed(baslangic, model.name)] });

@@ -1,22 +1,22 @@
 const { Events, PermissionFlagsBits } = require('discord.js');
 const config = require('../config');
-const { getGuildModel, defaultNvidia } = require('../ai-models');
+const { getUserModel, defaultNvidia } = require('../ai-models');
 const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
 const { guvenilirMi } = require('../trust');
 const { aiAkis, durumEmbed, animMetni } = require('../ai-progress');
 
 // İsmi geçen veya etiketlenen mesajlarda bota soru sorulmuş sayılır.
-// Örnek: "nasılsın tigo" -> soru "nasılsın" olur.
+// Örnek: "nasılsın tigobot" -> soru "nasılsın" olur.
 async function handleMention(message) {
   const botId = message.client.user.id;
   const etiketlendi = message.mentions.has(botId);
-  const ismiGecti = /\btigo\b/i.test(message.content);
+  const ismiGecti = /\btigobot\b/i.test(message.content);
   if (!etiketlendi && !ismiGecti) return false;
 
   let soru = message.content.replace(new RegExp(`<@!?${botId}>`, 'g'), ' ');
-  soru = soru.replace(/^\s*tigo\b[,.!:\s]*/i, '').replace(/[\s,.!:?]*\btigo\s*[?.!]*$/i, '').trim();
+  soru = soru.replace(/^\s*tigobot\b[,.!:\s]*/i, '').replace(/[\s,.!:?]*\btigobot\s*[?.!]*$/i, '').trim();
   if (!soru) {
-    await message.reply('Seni dinliyorum. Örnek: nasılsın tigo');
+    await message.reply('Seni dinliyorum. Örnek: nasılsın tigobot');
     return true;
   }
   if (soru.length > MAX_SORU) {
@@ -33,7 +33,7 @@ async function handleMention(message) {
     markCooldown(message.author.id, message.guildId);
   }
 
-  const model = getGuildModel(message.guildId);
+  const model = getUserModel(message.author.id);
   const baslangic = animMetni(0);
   let mesaj;
   try {

@@ -1,5 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-const { allModels, getGuildModel, setGuildModel } = require('../ai-models');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { allModels, getUserModel, setUserModel } = require('../ai-models');
 
 module.exports = {
   data: (() => {
@@ -16,7 +16,7 @@ module.exports = {
   async execute(interaction) {
     const key = interaction.options.getString('model');
     if (!key) {
-      const cur = getGuildModel(interaction.guildId);
+      const cur = getUserModel(interaction.user.id);
       const satirlar = allModels().map(m =>
         `${m.key === cur.key ? '[aktif]' : '[ ]'} ${m.name} (${m.kind === 'local' ? 'senin bilgisayarın' : 'NVIDIA bulutu'})`
       );
@@ -27,10 +27,8 @@ module.exports = {
         .setTimestamp();
       return interaction.reply({ embeds: [embed] });
     }
-    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
-      return interaction.reply({ content: 'Modeli sadece sunucuyu yönetenler değiştirebilir. Mevcut modeli görmek için /aimodels yazman yeterli.', ephemeral: true });
-    }
-    const m = setGuildModel(interaction.guildId, key);
+    // Model seçimi kişiseldir: herkes kendi modelini seçebilir
+    const m = setUserModel(interaction.user.id, key);
     if (!m) {
       return interaction.reply({ content: 'Bilinmeyen model. Listeyi görmek için /aimodels yaz.', ephemeral: true });
     }
