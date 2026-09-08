@@ -25,7 +25,7 @@ module.exports = {
     const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
 
     const embed = new EmbedBuilder()
-      .setTitle('⚠️ Uyarı')
+      .setTitle('Uyarı')
       .setColor(0xFEE75C)
       .addFields(
         { name: 'Kullanıcı', value: `${user.tag} (${user.id})` },
@@ -34,7 +34,7 @@ module.exports = {
       )
       .setTimestamp();
 
-    try { await user.send(`⚠️ **${interaction.guild.name}** sunucusunda uyarıldın.\nSebep: ${reason}`); } catch {}
+    try { await user.send(`**${interaction.guild.name}** sunucusunda uyarıldın.\nSebep: ${reason}`); } catch {}
 
     await interaction.reply({ embeds: [embed] });
     await sendLog(interaction, embed);

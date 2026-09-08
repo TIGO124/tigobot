@@ -15,7 +15,7 @@ module.exports = {
     if (hasBanned || hasInvite) {
       try { await message.delete(); } catch {}
       try {
-        const warn = await message.channel.send(`${message.author}, ⚠️ Bu tür mesajlar bu sunucuda yasak!`);
+        const warn = await message.channel.send(`${message.author}, Bu tür mesajlar bu sunucuda yasak!`);
         setTimeout(() => warn.delete().catch(() => {}), 5000);
       } catch {}
     }

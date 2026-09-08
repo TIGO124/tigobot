@@ -31,7 +31,7 @@ for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
 }
 
 client.once(Events.ClientReady, c => {
-  console.log(`✅ Giriş yapıldı: ${c.user.tag}`);
+  console.log(`Giriş yapıldı: ${c.user.tag}`);
 });
 
 client.on(Events.InteractionCreate, async interaction => {
@@ -43,19 +43,19 @@ client.on(Events.InteractionCreate, async interaction => {
   } catch (e) {
     console.error(e);
     if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: '❌ Komutta hata oluştu!', ephemeral: true }).catch(() => {});
+      await interaction.followUp({ content: 'Komutta hata oluştu!', ephemeral: true }).catch(() => {});
     } else {
-      await interaction.reply({ content: '❌ Komutta hata oluştu!', ephemeral: true }).catch(() => {});
+      await interaction.reply({ content: 'Komutta hata oluştu!', ephemeral: true }).catch(() => {});
     }
   }
 });
 
 if (!process.env.TOKEN) {
-  console.error('❌ TOKEN bulunamadı! Railway Variables veya .env dosyasını kontrol et.');
+  console.error('TOKEN bulunamadı! Railway Variables veya .env dosyasını kontrol et.');
   process.exit(1);
 }
 
 client.login(process.env.TOKEN).catch(err => {
-  console.error('❌ Discord girişi başarısız. TOKEN yanlış olabilir (Bot sekmesindeki token olmalı, Uygulama ID değil):', err.message);
+  console.error('Discord girişi başarısız. TOKEN yanlış olabilir (Bot sekmesindeki token olmalı, Uygulama ID değil):', err.message);
   process.exit(1);
 });

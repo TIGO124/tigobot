@@ -10,9 +10,9 @@ module.exports = {
     const amount = interaction.options.getInteger('adet');
     try {
       await interaction.channel.bulkDelete(amount, true);
-      await interaction.reply({ content: `🧹 ${amount} mesaj silindi.`, ephemeral: true });
+      await interaction.reply({ content: `${amount} mesaj silindi.`, ephemeral: true });
     } catch (e) {
-      await interaction.reply({ content: `❌ Hata: ${e.message} (14 günden eski mesajlar silinemez)`, ephemeral: true });
+      await interaction.reply({ content: `Hata: ${e.message} (14 günden eski mesajlar silinemez)`, ephemeral: true });
     }
   },
 };

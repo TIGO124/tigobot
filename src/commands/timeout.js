@@ -13,19 +13,19 @@ module.exports = {
     const minutes = interaction.options.getInteger('sure');
     const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
 
-    if (!member) return interaction.reply({ content: '❌ Kullanıcı sunucuda bulunamadı.', ephemeral: true });
-    if (!member.moderatable) return interaction.reply({ content: '❌ Bu kullanıcıya timeout atamam (rolümden yüksek olabilir).', ephemeral: true });
+    if (!member) return interaction.reply({ content: 'Kullanıcı sunucuda bulunamadı.', ephemeral: true });
+    if (!member.moderatable) return interaction.reply({ content: 'Bu kullanıcıya timeout atamam (rolümden yüksek olabilir).', ephemeral: true });
 
     try {
       await member.timeout(minutes * 60 * 1000, reason);
       const embed = new EmbedBuilder()
-        .setTitle('🔇 Timeout')
+        .setTitle('Timeout')
         .setColor(0xEB459E)
         .setDescription(`${member.user.tag} **${minutes} dakika** susturuldu.\nSebep: ${reason}`)
         .setTimestamp();
       await interaction.reply({ embeds: [embed] });
     } catch (e) {
-      await interaction.reply({ content: `❌ Hata: ${e.message}`, ephemeral: true });
+      await interaction.reply({ content: `Hata: ${e.message}`, ephemeral: true });
     }
   },
 };

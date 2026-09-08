@@ -44,16 +44,16 @@ function put(pathname, body) {
 (async () => {
   try {
     if (!process.env.TOKEN || !process.env.CLIENT_ID) throw new Error('.env içinde TOKEN/CLIENT_ID eksik');
-    console.log(`⏳ ${commands.length} komut kaydediliyor (https)...`);
+    console.log(`${commands.length} komut kaydediliyor (https)...`);
     if (process.env.GUILD_ID) {
       await put(`/api/v10/applications/${process.env.CLIENT_ID}/guilds/${process.env.GUILD_ID}/commands`, commands);
-      console.log('✅ Test sunucusuna (anında) kaydedildi.');
+      console.log('Test sunucusuna (anında) kaydedildi.');
     } else {
       await put(`/api/v10/applications/${process.env.CLIENT_ID}/commands`, commands);
-      console.log('✅ Global kaydedildi (1 saate kadar yayılır). Anında görmek için .env içine GUILD_ID ekle.');
+      console.log('Global kaydedildi (1 saate kadar yayılır). Anında görmek için .env içine GUILD_ID ekle.');
     }
   } catch (e) {
-    console.error('❌ Deploy hatası:', e.message);
+    console.error('Deploy hatası:', e.message);
     process.exitCode = 1;
   }
 })();

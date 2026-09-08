@@ -5,8 +5,8 @@ module.exports = {
     .setName('ping')
     .setDescription('Botun gecikmesini gösterir'),
   async execute(interaction) {
-    const sent = await interaction.reply({ content: '🏓 Ölçülüyor...', fetchReply: true });
+    const sent = await interaction.reply({ content: 'Ölçülüyor...', fetchReply: true });
     const latency = sent.createdTimestamp - interaction.createdTimestamp;
-    await interaction.editReply(`🏓 Pong! Gecikme: ${latency}ms | API: ${Math.round(interaction.client.ws.ping)}ms`);
+    await interaction.editReply(`Pong! Gecikme: ${latency}ms | API: ${Math.round(interaction.client.ws.ping)}ms`);
   },
 };

@@ -10,7 +10,7 @@ module.exports = {
     const member = interaction.guild.members.cache.get(user.id);
 
     const embed = new EmbedBuilder()
-      .setTitle(`👤 ${user.tag}`)
+      .setTitle(`${user.tag}`)
       .setThumbnail(user.displayAvatarURL({ size: 256 }))
       .setColor(0x57F287)
       .addFields(

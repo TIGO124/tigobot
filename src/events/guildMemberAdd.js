@@ -16,8 +16,8 @@ module.exports = {
     if (!channel || !channel.isTextBased()) return;
 
     const embed = new EmbedBuilder()
-      .setTitle(`👋 Hoş geldin, ${member.user.username}!`)
-      .setDescription(`**${member.guild.name}** sunucusuna katıldın!\n\n📜 Kuralları okumayı unutma.\n💬 Sohbete katılmak için kendini tanıt.\n\nŞu an **${member.guild.memberCount}** kişiyiz!`)
+      .setTitle(`Hoş geldin, ${member.user.username}!`)
+      .setDescription(`**${member.guild.name}** sunucusuna katıldın!\n\nKuralları okumayı unutma.\nSohbete katılmak için kendini tanıt.\n\nŞu an **${member.guild.memberCount}** kişiyiz!`)
       .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
       .setColor(0x57F287)
       .setTimestamp();
@@ -27,7 +27,7 @@ module.exports = {
     } catch {}
 
     try {
-      await member.send(`👋 **${member.guild.name}** sunucusuna hoş geldin!\nKuralları okuyup keyifli sohbetler dileriz.`);
+      await member.send(`**${member.guild.name}** sunucusuna hoş geldin!\nKuralları okuyup keyifli sohbetler dileriz.`);
     } catch {}
   },
 };
