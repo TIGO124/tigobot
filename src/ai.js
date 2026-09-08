@@ -49,7 +49,10 @@ async function chat(model, messages) {
   }
   const base = (process.env.AI_BASE_URL || '').replace(/\/+$/, '');
   if (!base) {
-    throw new Error('Yerel model için AI_BASE_URL ayarlı değil. PCndeki tünel adresini Railway Variables kısmına AI_BASE_URL olarak ekle.');
+    // Tünel adresi yoksa yerel servis kapalı sayılır -> nvidia yedeğe düşer
+    const err = new Error('LOCAL_UNREACHABLE');
+    err.code = 'LOCAL_UNREACHABLE';
+    throw err;
   }
   try {
     return await callOpenAI(base, process.env.LOCAL_API_KEY || null, model.model, tum, 60000);
