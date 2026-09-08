@@ -1,32 +1,27 @@
-const { Events, REST, Routes } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
+const { Events } = require('discord.js');
+const { setLang } = require('../i18n');
+const { load, save } = require('../store');
+const { CODE_VERSION, registerGuildCommands } = require('../schema');
 
-function toplaKomutlar() {
-  const commands = [];
-  const commandsPath = path.join(__dirname, '..', 'commands');
-  for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) {
-    const cmd = require(path.join(commandsPath, file));
-    if (cmd.data) commands.push(cmd.data.toJSON());
-  }
-  return commands;
+function toplaKomutlar(lang) {
+  return require('../schema').buildGuildCommands(lang);
 }
 
 module.exports = {
   name: Events.GuildCreate,
   async execute(guild) {
     try {
-      if (!process.env.TOKEN || !process.env.CLIENT_ID) {
-        console.error('Otomatik komut kaydı atlandı: TOKEN/CLIENT_ID eksik');
+      // Yeni sunucularda varsayılan dil İngilizce
+      setLang(guild.id, 'en');
+      if (!process.env.TOKEN) {
+        console.error('Otomatik komut kaydı atlandı: TOKEN eksik');
         return;
       }
-      const commands = toplaKomutlar();
-      const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-      await rest.put(
-        Routes.applicationGuildCommands(process.env.CLIENT_ID, guild.id),
-        { body: commands },
-      );
-      console.log(`Komutlar yeni sunucuya kaydedildi: ${guild.name} (${guild.id})`);
+      await registerGuildCommands(guild.id, 'en', guild.client);
+      const sv = load('schema.json', {});
+      sv[guild.id] = CODE_VERSION;
+      save('schema.json', sv);
+      console.log(`Komutlar yeni sunucuya kaydedildi: ${guild.name} (${guild.id}) [en]`);
     } catch (e) {
       console.error(`Otomatik komut kaydı başarısız (${guild.id}):`, e.message);
     }

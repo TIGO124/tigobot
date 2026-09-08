@@ -1,28 +1,31 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { allModels, getUserModel, setUserModel } = require('../ai-models');
+const { t, getLang } = require('../i18n');
+const { allModels, getUserModel, setUserModel, modelName, kindLabel } = require('../ai-models');
 
-module.exports = {
-  data: (() => {
-    const cmd = new SlashCommandBuilder()
-      .setName('aimodels')
-      .setDescription('AI modelini gösterir veya değiştirir');
-    const opt = cmd.addStringOption(o => {
-      o.setName('model').setDescription('Kullanılacak model').setRequired(false);
-      for (const m of allModels()) o.addChoices({ name: m.name.slice(0, 100), value: m.key });
-      return o;
-    });
-    return cmd;
-  })(),
-  async execute(interaction) {
+const NAMES = { tr: 'aimodels', en: 'aimodels' };
+
+function build(lang) {
+  const cmd = new SlashCommandBuilder()
+    .setName(NAMES[lang] || NAMES.tr)
+    .setDescription(t(lang, 'aim.desc'));
+  cmd.addStringOption(o => {
+    o.setName('model').setDescription(t(lang, 'aim.opt')).setRequired(false);
+    for (const m of allModels()) o.addChoices({ name: modelName(m, lang).slice(0, 100), value: m.key });
+    return o;
+  });
+  const data = cmd;
+
+  async function execute(interaction) {
+    const L = getLang(interaction.guildId);
     const key = interaction.options.getString('model');
     if (!key) {
       const cur = getUserModel(interaction.user.id);
       const satirlar = allModels().map(m =>
-        `${m.key === cur.key ? '[aktif]' : '[ ]'} ${m.name} (${m.kind === 'local' ? 'senin bilgisayarın' : 'NVIDIA bulutu'})`
+        t(L, m.key === cur.key ? 'aim.row' : 'aim.row.off', { n: modelName(m, L), y: kindLabel(m, L) })
       );
       const embed = new EmbedBuilder()
-        .setTitle('AI Modelleri')
-        .setDescription(`Aktif model: **${cur.name}**\n\n${satirlar.join('\n')}\n\nDeğiştirmek için: /aimodels model:<ad>`)
+        .setTitle(t(L, 'aim.title'))
+        .setDescription(t(L, 'aim.body', { cur: modelName(cur, L), rows: satirlar.join('\n') }))
         .setColor(0x5865F2)
         .setTimestamp();
       return interaction.reply({ embeds: [embed] });
@@ -30,11 +33,15 @@ module.exports = {
     // Model seçimi kişiseldir: herkes kendi modelini seçebilir
     const m = setUserModel(interaction.user.id, key);
     if (!m) {
-      return interaction.reply({ content: 'Bilinmeyen model. Listeyi görmek için /aimodels yaz.', ephemeral: true });
+      return interaction.reply({ content: t(L, 'ai.unknownModel'), ephemeral: true });
     }
     await interaction.reply(
-      `AI modeli değiştirildi: **${m.name}**` +
-      (m.kind === 'local' ? ' (bilgisayarındaki Ollama açık ve tünel bağlı olmalı)' : ' (NVIDIA bulutu üzerinden çalışır)')
+      t(L, 'aim.changed', { m: modelName(m, L) }) +
+      t(L, m.kind === 'local' ? 'aim.note.local' : 'aim.note.cloud')
     );
-  },
-};
+  }
+
+  return { data, execute };
+}
+
+module.exports = { build };

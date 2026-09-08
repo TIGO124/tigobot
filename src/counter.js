@@ -1,11 +1,13 @@
+const { t, getLang } = require('./i18n');
 const { load, save } = require('./store');
 
-function etiket(sayi) {
-  return `Toplam Uye: ${sayi}`;
+function etiket(lang, sayi) {
+  return t(lang, 'counter.label', { n: sayi });
 }
 
 async function updateCounter(guild) {
   try {
+    const L = getLang(guild.id);
     const map = load('counter.json', {});
     const chId = map[guild.id];
     if (!chId) return;
@@ -20,7 +22,7 @@ async function updateCounter(guild) {
       save('counter.json', map);
       return;
     }
-    const yeni = etiket(guild.memberCount);
+    const yeni = etiket(L, guild.memberCount);
     if (ch.name !== yeni) await ch.setName(yeni);
   } catch {}
 }

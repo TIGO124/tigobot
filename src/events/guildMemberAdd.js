@@ -1,4 +1,5 @@
 const { Events, EmbedBuilder } = require('discord.js');
+const { t, getLang } = require('../i18n');
 const { updateCounter } = require('../counter');
 
 module.exports = {
@@ -16,9 +17,10 @@ module.exports = {
     if (!channel) channel = member.guild.systemChannel;
 
     if (channel && channel.isTextBased()) {
+      const L = getLang(member.guild.id);
       const embed = new EmbedBuilder()
-        .setTitle(`Hoş geldin, ${member.user.username}!`)
-        .setDescription(`**${member.guild.name}** sunucusuna katıldın!\n\nKuralları okumayı unutma.\nSohbete katılmak için kendini tanıt.\n\nŞu an **${member.guild.memberCount}** kişiyiz!`)
+        .setTitle(t(L, 'welcome.title', { u: member.user.username }))
+        .setDescription(t(L, 'welcome.body', { g: member.guild.name, n: member.guild.memberCount }))
         .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
         .setColor(0x57F287)
         .setTimestamp();
@@ -29,7 +31,7 @@ module.exports = {
     }
 
     try {
-      await member.send(`**${member.guild.name}** sunucusuna hoş geldin!\nKuralları okuyup keyifli sohbetler dileriz.`);
+      await member.send(t(getLang(member.guild.id), 'welcome.dm', { g: member.guild.name }));
     } catch {}
 
     // Oto-rol (.env içinde AUTO_ROLE_ID varsa)

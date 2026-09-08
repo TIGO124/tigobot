@@ -1,6 +1,9 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { getUserModel } = require('../ai-models');
+const { t, getLang } = require('../i18n');
+const { getUserModel, modelName } = require('../ai-models');
 const { acikMi } = require('../local');
+
+const NAMES = { tr: 'durum', en: 'status' };
 
 async function yerelKontrol() {
   if (!acikMi()) return { bagli: false };
@@ -17,24 +20,30 @@ async function yerelKontrol() {
   }
 }
 
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('durum')
-    .setDescription('AI servisinin durumunu gösterir (yerel + nvidia)'),
-  async execute(interaction) {
+function build(lang) {
+  const data = new SlashCommandBuilder()
+    .setName(NAMES[lang] || NAMES.tr)
+    .setDescription(t(lang, 'status.desc'));
+
+  async function execute(interaction) {
+    const L = getLang(interaction.guildId);
     await interaction.deferReply();
     const model = getUserModel(interaction.user.id);
     const yerel = await yerelKontrol();
     const nvidiaKey = Boolean(process.env.NVIDIA_API_KEY);
     const embed = new EmbedBuilder()
-      .setTitle('AI Durumu')
+      .setTitle(t(L, 'status.title'))
       .setColor(0x5865F2)
       .addFields(
-        { name: 'Aktif model', value: model.name },
-        { name: 'Yerel', value: yerel.bagli ? `✓ Bağlı (${yerel.sayi} model)` : '✗ Kapalı' },
-        { name: 'NVIDIA', value: nvidiaKey ? '✓ Aktif' : '✗ Kapalı' },
+        { name: t(L, 'status.f.model'), value: modelName(model, L) },
+        { name: t(L, 'status.f.local'), value: yerel.bagli ? t(L, 'status.local.on', { n: yerel.sayi }) : t(L, 'status.local.off') },
+        { name: t(L, 'status.f.nvidia'), value: nvidiaKey ? t(L, 'status.nvidia.on') : t(L, 'status.nvidia.off') },
       )
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });
-  },
-};
+  }
+
+  return { data, execute };
+}
+
+module.exports = { build };

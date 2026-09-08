@@ -1,35 +1,30 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { t, getLang } = require('../i18n');
 
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('yardim')
-    .setDescription('Tüm komutları listeler'),
-  async execute(interaction) {
+const NAMES = { tr: 'yardim', en: 'help' };
+
+function build(lang) {
+  const data = new SlashCommandBuilder()
+    .setName(NAMES[lang] || NAMES.tr)
+    .setDescription(t(lang, 'help.desc'));
+
+  async function execute(interaction) {
+    const L = getLang(interaction.guildId);
+    const fields = [];
+    for (let i = 1; i <= 14; i++) {
+      fields.push({ name: t(L, `help.f${i}n`), value: t(L, `help.f${i}v`), inline: true });
+    }
     const embed = new EmbedBuilder()
-      .setTitle('TigoBot Yardım')
+      .setTitle(t(L, 'help.title'))
       .setColor(0x5865F2)
-      .setDescription('Moderasyon + Karşılama botu komutları:')
-      .addFields(
-        { name: '/ping', value: 'Gecikmeyi gösterir', inline: true },
-        { name: '/kullanici-bilgi', value: 'Kullanıcı bilgisi gösterir', inline: true },
-        { name: '/clear', value: 'Mesaj siler (1-100)', inline: true },
-        { name: '/warn', value: 'Üyeyi uyarır + loga yazar', inline: true },
-        { name: '/timeout', value: 'Üyeyi susturur (dk)', inline: true },
-        { name: '/kick', value: 'Üyeyi atar', inline: true },
-        { name: '/ban', value: 'Üyeyi yasaklar', inline: true },
-        { name: '/zar /yazi-tura /8ball', value: 'Eğlence', inline: true },
-        { name: '/ask-olcer /espri', value: 'Eğlence', inline: true },
-        { name: '/anket /hatirlatici', value: 'Araçlar', inline: true },
-        { name: '/kanal-olustur /kategori-olustur /rol-olustur', value: 'Sunucu yönetimi', inline: true },
-        { name: '/tepki-rol-kur /sayac-kur', value: 'Rol + sayaç kurulumu', inline: true },
-        { name: '/ai /aimodels', value: 'Yapay zeka soru + model seçimi', inline: true },
-        { name: '/durum', value: 'AI servis durumu', inline: true },
-        { name: '/local', value: 'Yerel AI aç/kapat (sahip)', inline: true },
-        { name: '/trust', value: 'Beklemeden muaf listesi (sahip)', inline: true },
-      )
-      .setFooter({ text: 'Otomatik: hoşgeldin mesajı + küfür/link filtresi + ismiyle seslenince cevap' })
+      .setDescription(t(L, 'help.body'))
+      .addFields(fields)
+      .setFooter({ text: t(L, 'help.footer') })
       .setTimestamp();
-
     await interaction.reply({ embeds: [embed] });
-  },
-};
+  }
+
+  return { data, execute };
+}
+
+module.exports = { build };

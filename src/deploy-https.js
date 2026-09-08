@@ -1,15 +1,20 @@
-// Undici/IPv6-DNS sorunu olan ağlarda çalışan alternatif deploy betiği.
-// Node'un yerleşik https modülünü kullanır (dns.lookup ile çalışır).
+// Manuel komut kaydı (yerel ağdaki undici sorunu için https kullanır).
+// GUILD_IDS virgülle ayrılmış sunucular; GUILD_LANGS "id:dil" eşleşmeleri (yoksa tr).
+// Örnek: GUILD_LANGS=123:tr,456:en
+// Not: Railway'de açılış senkronu + /language + guildCreate otomatik halleder,
+// bu betik genelde gerekmez.
 require('dotenv').config();
-const fs = require('fs');
-const path = require('path');
 const https = require('https');
+const { buildGuildCommands } = require('./schema');
 
-const commands = [];
-const commandsPath = path.join(__dirname, 'commands');
-for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) {
-  const cmd = require(path.join(commandsPath, file));
-  if (cmd.data) commands.push(cmd.data.toJSON());
+function guildDilleri() {
+  const ids = (process.env.GUILD_IDS || process.env.GUILD_ID || '').split(',').map(s => s.trim()).filter(Boolean);
+  const eslesme = {};
+  for (const parca of (process.env.GUILD_LANGS || '').split(',').map(s => s.trim()).filter(Boolean)) {
+    const [id, lang] = parca.split(':').map(s => (s || '').trim());
+    if (id) eslesme[id] = lang === 'en' ? 'en' : 'tr';
+  }
+  return ids.map(id => ({ id, lang: eslesme[id] || 'tr' }));
 }
 
 function put(pathname, body) {
@@ -44,18 +49,15 @@ function put(pathname, body) {
 (async () => {
   try {
     if (!process.env.TOKEN || !process.env.CLIENT_ID) throw new Error('.env içinde TOKEN/CLIENT_ID eksik');
-    console.log(`${commands.length} komut kaydediliyor (https)...`);
-    // GUILD_IDS virgülle ayrılmış birden çok sunucu alabilir (anında). Yoksa globale düşer.
-    const guildIds = (process.env.GUILD_IDS || process.env.GUILD_ID || '')
-      .split(',').map(s => s.trim()).filter(Boolean);
-    if (guildIds.length) {
-      for (const gid of guildIds) {
-        await put(`/api/v10/applications/${process.env.CLIENT_ID}/guilds/${gid}/commands`, commands);
-        console.log(`Sunucuya kaydedildi (anında): ${gid}`);
-      }
-    } else {
-      await put(`/api/v10/applications/${process.env.CLIENT_ID}/commands`, commands);
-      console.log('Global kaydedildi (1 saate kadar yayılır). Anında görmek için .env içine GUILD_ID ekle.');
+    const hedefler = guildDilleri();
+    if (!hedefler.length) {
+      console.log('GUILD_IDS yok; global kayıt yapılmıyor (çift komut olmaması için).');
+      return;
+    }
+    for (const { id, lang } of hedefler) {
+      const commands = buildGuildCommands(lang);
+      await put(`/api/v10/applications/${process.env.CLIENT_ID}/guilds/${id}/commands`, commands);
+      console.log(`${commands.length} komut kaydedildi: ${id} [${lang}]`);
     }
   } catch (e) {
     console.error('Deploy hatası:', e.message);

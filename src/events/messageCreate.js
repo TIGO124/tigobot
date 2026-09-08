@@ -1,8 +1,9 @@
 const { Events, PermissionFlagsBits } = require('discord.js');
 const config = require('../config');
-const { getUserModel, defaultNvidia } = require('../ai-models');
+const { getUserModel, defaultNvidia, modelName } = require('../ai-models');
 const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
 const { guvenilirMi } = require('../trust');
+const { t, getLang } = require('../i18n');
 const { aiAkis, durumEmbed, animMetni } = require('../ai-progress');
 
 // İsmi geçen veya etiketlenen mesajlarda bota soru sorulmuş sayılır.
@@ -15,29 +16,30 @@ async function handleMention(message) {
 
   let soru = message.content.replace(new RegExp(`<@!?${botId}>`, 'g'), ' ');
   soru = soru.replace(/^\s*tigobot\b[,.!:\s]*/i, '').replace(/[\s,.!:?]*\btigobot\s*[?.!]*$/i, '').trim();
+  const L0 = getLang(message.guildId);
   if (!soru) {
-    await message.reply('Seni dinliyorum. Örnek: nasılsın tigobot');
+    await message.reply(t(L0, 'ai.listening'));
     return true;
   }
   if (soru.length > MAX_SORU) {
-    await message.reply(`Sorun çok uzun (en fazla ${MAX_SORU} karakter).`);
+    await message.reply(t(L0, 'ai.toolong', { max: MAX_SORU }));
     return true;
   }
   const sahipMi = message.guild?.ownerId === message.author.id;
   if (!guvenilirMi(message.guildId, message.author.id, sahipMi)) {
     const kalan = cooldownLeft(message.author.id, message.guildId);
     if (kalan > 0) {
-      await message.reply(`Biraz yavaş. ${kalan} saniye sonra tekrar dene.`);
+      await message.reply(t(L0, 'ai.cooldown', { kalan }));
       return true;
     }
     markCooldown(message.author.id, message.guildId);
   }
 
   const model = getUserModel(message.author.id);
-  const baslangic = animMetni(0);
+  const baslangic = animMetni(0, L0);
   let mesaj;
   try {
-    mesaj = await message.reply({ embeds: [durumEmbed(baslangic, model.name)] });
+    mesaj = await message.reply({ embeds: [durumEmbed(baslangic, modelName(model, L0), L0)] });
   } catch {
     return true;
   }
@@ -46,6 +48,7 @@ async function handleMention(message) {
     ekGonder: o => message.channel.send(o),
     userId: message.author.id,
     userTag: message.author.tag,
+    guildId: message.guildId,
     model,
     yedek: defaultNvidia(),
     soru,
@@ -74,7 +77,7 @@ module.exports = {
     if (hasBanned || hasInvite) {
       try { await message.delete(); } catch {}
       try {
-        const warn = await message.channel.send(`${message.author}, Bu tür mesajlar bu sunucuda yasak!`);
+        const warn = await message.channel.send(t(getLang(message.guildId), 'filter.warn', { u: message.author }));
         setTimeout(() => warn.delete().catch(() => {}), 5000);
       } catch {}
     }

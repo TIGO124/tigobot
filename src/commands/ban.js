@@ -1,22 +1,31 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { t, getLang } = require('../i18n');
 
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('ban')
-    .setDescription('Bir üyeyi yasaklar')
-    .addUserOption(o => o.setName('kullanici').setDescription('Yasaklanacak kişi').setRequired(true))
-    .addStringOption(o => o.setName('sebep').setDescription('Sebep').setRequired(false))
-    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
-  async execute(interaction) {
+const NAMES = { tr: 'ban', en: 'ban' };
+
+function build(lang) {
+  const data = new SlashCommandBuilder()
+    .setName(NAMES[lang] || NAMES.tr)
+    .setDescription(t(lang, 'ban.desc'))
+    .addUserOption(o => o.setName('kullanici').setDescription(t(lang, 'ban.opt.user')).setRequired(true))
+    .addStringOption(o => o.setName('sebep').setDescription(t(lang, 'ban.opt.reason')).setRequired(false))
+    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers);
+
+  async function execute(interaction) {
+    const L = getLang(interaction.guildId);
     const user = interaction.options.getUser('kullanici');
-    const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
+    const reason = interaction.options.getString('sebep') || t(L, 'warn.noreason');
     const member = interaction.guild.members.cache.get(user.id);
-    if (member && !member.bannable) return interaction.reply({ content: 'Bu kişiyi yasaklayamam.', ephemeral: true });
+    if (member && !member.bannable) return interaction.reply({ content: t(L, 'ban.noperm'), ephemeral: true });
     try {
       await interaction.guild.members.ban(user.id, { reason });
-      await interaction.reply(`${user.tag} yasaklandı. Sebep: ${reason}`);
-    } catch (e) {
-      await interaction.reply({ content: 'Yasaklama yapılamadı. Yetkilerimi ve rol sıramı kontrol et.', ephemeral: true });
+      await interaction.reply(t(L, 'ban.done', { tag: user.tag, r: reason }));
+    } catch {
+      await interaction.reply({ content: t(L, 'ban.err'), ephemeral: true });
     }
-  },
-};
+  }
+
+  return { data, execute };
+}
+
+module.exports = { build };

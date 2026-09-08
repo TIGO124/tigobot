@@ -2,12 +2,12 @@
 // - kind 'local'  -> PC'deki Ollama (AI_BASE_URL), NVIDIA key kullanılmaz.
 // - kind 'nvidia' -> NVIDIA API, sadece NVIDIA_API_KEY kullanılır.
 // - Yerel servise ulaşılamazsa LOCAL_UNREACHABLE hatası verir (yedek için).
-// - Tüm istekler tek kuyruktan FIFO sırayla geçer.
+// - Tüm istekler tek kuyruktan FIFO sırayla geçer (kuyrugaEkle/siraBilgisi).
 const { sanitize } = require('./sanitize');
 const { acikMi } = require('./local');
+const { t } = require('./i18n');
 
 const NVIDIA_BASE = 'https://integrate.api.nvidia.com/v1';
-const SYSTEM_PROMPT = 'Senin adın TigoBot. Türkçe konuşan, yardımsever ve öz cevaplar veren bir Discord botusun. Sana nasılsın diye sorulursa kendini TigoBot olarak tanıtarak cevap ver, örneğin: "Merhaba, iyiyim! TigoBot olarak yardıma hazırım." Asla başka bir isim veya kimlik kullanma.';
 const BEKLEME_MS = 15 * 1000;
 const MAX_SORU = 1000;
 
@@ -40,8 +40,9 @@ function erisilemezMi(e) {
   return /fetch failed|connect|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|timeout/i.test(e.message || '');
 }
 
-async function chat(model, messages) {
-  const tum = [{ role: 'system', content: SYSTEM_PROMPT }, ...messages];
+async function chat(model, messages, lang) {
+  const L = lang === 'en' ? 'en' : 'tr';
+  const tum = [{ role: 'system', content: t(L, 'sys.prompt') }, ...messages];
   if (model.kind === 'nvidia') {
     if (!process.env.NVIDIA_API_KEY) {
       throw new Error('NVIDIA_API_KEY ayarlı değil. Railway Variables kısmına ekle.');
@@ -68,7 +69,6 @@ async function chat(model, messages) {
 }
 
 // Global FIFO kuyruk: TÜM modellerde (yerel 4B/9B + nvidia) aynı anda tek üretim.
-// Tek PC olduğu için farklı modeller bile aynı anda çalışamaz, herkes sıraya girer.
 const bekleyenler = [];
 let aktifIs = null;
 let isSayaci = 0;
@@ -84,7 +84,6 @@ function siradaki() {
   );
 }
 
-// Üretim işini kuyruğa ekler. Dönen jobId ile sıra takibi yapılır.
 function kuyrugaEkle(userId, userTag, modelAdi, is) {
   const job = { id: ++isSayaci, userId, userTag, modelAdi, is, resolve: null, reject: null };
   const sonuc = new Promise((resolve, reject) => { job.resolve = resolve; job.reject = reject; });
@@ -93,7 +92,6 @@ function kuyrugaEkle(userId, userTag, modelAdi, is) {
   return { jobId: job.id, sonuc };
 }
 
-// { sira, toplam } — sıra 1 = şu an üretiliyor. İş bitmiş/kalmamışsa null.
 function siraBilgisi(jobId) {
   if (aktifIs && aktifIs.id === jobId) return { sira: 1, toplam: bekleyenler.length + 1 };
   const idx = bekleyenler.findIndex(j => j.id === jobId);
@@ -101,19 +99,18 @@ function siraBilgisi(jobId) {
   return { sira: idx + 2, toplam: bekleyenler.length + 1 };
 }
 
-async function uretimYap(model, yedekModel, messages) {
+async function uretimYap(model, yedekModel, messages, lang) {
   try {
-    const text = await chat(model, messages);
+    const text = await chat(model, messages, lang);
     return { text, model, note: '' };
   } catch (e) {
     if (e && e.code === 'LOCAL_UNREACHABLE') {
-      const text = await chat(yedekModel, messages);
+      const text = await chat(yedekModel, messages, lang);
       return { text, model: yedekModel, note: '' };
     }
-    // Seçili nvidia model hesaba kapalıysa (404) varsayılan modele düş
     if (model.kind === 'nvidia' && /\(404\)/.test(e.message || '') && model.key !== yedekModel.key) {
-      const text = await chat(yedekModel, messages);
-      return { text, model: yedekModel, note: 'Seçili modele şu anda ulaşılamıyor, yedek model ile cevaplanıyor.' };
+      const text = await chat(yedekModel, messages, lang);
+      return { text, model: yedekModel, note: t(lang, 'ai.fallback.nvidia') };
     }
     throw e;
   }

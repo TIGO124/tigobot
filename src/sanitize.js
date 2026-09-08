@@ -14,18 +14,21 @@ function sanitize(text) {
   return out.slice(0, 500);
 }
 
-module.exports = { sanitize, kullaniciMesaji };
+const { t } = require('./i18n');
 
-// Hatayı kullanıcıya gösterilecek genel mesaja çevirir.
+// Hatayı kullanıcıya gösterilecek genel mesaja çevirir (istenen dilde).
 // Teknik detay kanala gitmez, Railway loguna düşer (sahip oradan görür).
-function kullaniciMesaji(e) {
+function kullaniciMesaji(e, lang) {
+  const L = lang === 'en' ? 'en' : 'tr';
   const ham = sanitize(e && e.message ? e.message : String(e));
   if (ham) console.error('İç hata (sadece logda):', ham);
-  if (/NVIDIA_API_KEY/i.test(ham)) return 'AI şu anda kullanılamıyor. Lütfen daha sonra tekrar dene.';
+  if (/NVIDIA_API_KEY/i.test(ham)) return t(L, 'err.ai.unavailable');
   if (/AI hatası \((5|429)/.test(ham) || /timeout|zaman aşımı/i.test(ham)) {
-    return 'AI şu anda cevap veremiyor. Lütfen biraz sonra tekrar dene.';
+    return t(L, 'err.ai.busy');
   }
-  if (/AI hatası \(4/i.test(ham)) return 'AI isteği işlenemedi. Lütfen tekrar dene.';
-  if (/boş cevap/i.test(ham)) return 'AI boş cevap verdi. Lütfen tekrar dene.';
-  return 'Bir sorun oluştu. Lütfen tekrar dene.';
+  if (/AI hatası \(4/i.test(ham)) return t(L, 'err.ai.bad');
+  if (/boş cevap/i.test(ham)) return t(L, 'err.ai.empty');
+  return t(L, 'err.generic');
 }
+
+module.exports = { sanitize, kullaniciMesaji };

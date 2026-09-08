@@ -1,23 +1,25 @@
 const { EmbedBuilder } = require('discord.js');
 const { kuyrugaEkle, siraBilgisi, uretimYap } = require('./ai');
 const { sanitize, kullaniciMesaji } = require('./sanitize');
+const { t, getLang, setLang } = require('./i18n');
+const { detectLang } = require('./langdetect');
+const { modelName } = require('./ai-models');
 
-function durumEmbed(metin, modelAdi) {
+function durumEmbed(metin, modelAdi, lang) {
   return new EmbedBuilder()
     .setDescription(metin)
     .setColor(0x5865F2)
-    .setFooter({ text: `Model: ${modelAdi}` })
+    .setFooter({ text: t(lang, 'ai.modelTag', { m: modelAdi }) })
     .setTimestamp();
 }
 
 // Sıra göstergesi normal yazı değil: discord diff bloğu
-function kuyrukMetni(sira, toplam) {
-  return '```diff\n- Sıradasınız! Sıranız: ' + sira + '/' + toplam + '\n- Önünüzde ' + (sira - 1) + ' istek var\n```';
+function kuyrukMetni(sira, toplam, lang) {
+  return '```diff\n' + t(lang, 'ai.queue', { s: sira, t: toplam, o: sira - 1 }) + '\n```';
 }
 
-const ANIM = ['oluşturuluyor.', 'oluşturuluyor..', 'oluşturuluyor...'];
-function animMetni(i) {
-  return '```fix\n' + ANIM[i % ANIM.length] + '\n```';
+function animMetni(i, lang) {
+  return '```fix\n' + t(lang, `ai.generating.${i % 3}`) + '\n```';
 }
 
 // Cümle sonlarından ~400 karakterlik parçalar
@@ -41,29 +43,41 @@ function cumlelereBol(text, max = 400) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// Cevabı kademeli gösterir: aynı mesajı düzenleyerek parça parça ekler.
-// Embed açıklaması 4000 karakteri aşarsa ekGonder ile yeni mesajla devam eder.
-async function kademeliGoster(mesaj, ekGonder, modelAdi, tamMetin) {
+async function kademeliGoster(mesaj, ekGonder, modelAdi, lang, tamMetin) {
   const parcalar = cumlelereBol(tamMetin, 400);
   let gosterilen = '';
   let aktif = mesaj;
   for (const p of parcalar) {
     if ((gosterilen + p).length > 3900) {
-      aktif = await ekGonder({ embeds: [durumEmbed(p, modelAdi)] });
+      aktif = await ekGonder({ embeds: [durumEmbed(p, modelAdi, lang)] });
       gosterilen = p;
     } else {
       gosterilen += p;
-      await aktif.edit({ embeds: [durumEmbed(gosterilen, modelAdi)] });
+      await aktif.edit({ embeds: [durumEmbed(gosterilen, modelAdi, lang)] });
     }
     await sleep(900);
   }
 }
 
-// Ortak akış: kuyruk takibi + animasyon + kademeli cevap.
-// mesaj: düzenlenecek ilk mesaj (baslangic metni çağrıda gösterilmiş olmalı).
-async function aiAkis({ mesaj, ekGonder, userId, userTag, model, yedek, soru, baslangic }) {
-  const { jobId, sonuc } = kuyrugaEkle(userId, userTag, model.name, () =>
-    uretimYap(model, yedek, [{ role: 'user', content: soru }])
+// Ortak akış: dil algılama + kuyruk takibi + animasyon + kademeli cevap.
+async function aiAkis({ mesaj, ekGonder, userId, userTag, guildId, model, yedek, soru, baslangic }) {
+  const taban = getLang(guildId);
+  let lang = taban;
+  // Kullanıcı varsayılan dilden farklı dilde yazdıysa dile geç (+ sunucuda kalıcı yap)
+  const algi = detectLang(soru);
+  if (algi && algi !== taban) {
+    lang = algi;
+    if (guildId) {
+      setLang(guildId, algi);
+      try {
+        const { registerGuildCommands } = require('./schema');
+        const client = mesaj.client;
+        registerGuildCommands(guildId, algi, client).catch(() => {});
+      } catch {}
+    }
+  }
+  const { jobId, sonuc } = kuyrugaEkle(userId, userTag, modelName(model, lang), () =>
+    uretimYap(model, yedek, [{ role: 'user', content: soru }], lang)
   );
   let animI = 1;
   let sonMetin = baslangic || null;
@@ -71,26 +85,25 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, model, yedek, soru, ba
   const guncelle = async () => {
     try {
       const b = siraBilgisi(jobId);
-      const metin = !b || b.sira <= 1 ? animMetni(animI++) : kuyrukMetni(b.sira, b.toplam);
+      const metin = !b || b.sira <= 1 ? animMetni(animI++, lang) : kuyrukMetni(b.sira, b.toplam, lang);
       if (metin !== sonMetin) {
         sonMetin = metin;
-        await mesaj.edit({ embeds: [durumEmbed(metin, model.name)] });
+        await mesaj.edit({ embeds: [durumEmbed(metin, modelName(model, lang), lang)] });
       }
     } catch {}
   };
-  // Kısa beklemelerde sıra göstergesi yetişsin diye erken ilk kontrol
   await sleep(700);
   if (!bitti) await guncelle();
   const timer = setInterval(async () => { if (!bitti) await guncelle(); }, 2000);
   try {
-    const { text, model: kullanilan, note } = await sonuc;
+    const res = await sonuc;
     bitti = true;
     clearInterval(timer);
-    await kademeliGoster(mesaj, ekGonder, kullanilan.name, (note ? note + '\n\n' : '') + text);
+    await kademeliGoster(mesaj, ekGonder, modelName(res.model, lang), lang, (res.note ? res.note + '\n\n' : '') + res.text);
   } catch (e) {
     bitti = true;
     clearInterval(timer);
-    await mesaj.edit(kullaniciMesaji(e).slice(0, 2000)).catch(() => {});
+    await mesaj.edit(kullaniciMesaji(e, lang).slice(0, 2000)).catch(() => {});
   }
 }
 

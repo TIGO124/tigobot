@@ -5,6 +5,9 @@ const { Client, Collection, GatewayIntentBits, Events } = require('discord.js');
 const { handle: handleButton } = require('./buttons');
 const { updateCounter } = require('./counter');
 const { sanitize } = require('./sanitize');
+const { t, getLang } = require('./i18n');
+const { load, save } = require('./store');
+const { CODE_VERSION, buildGuildCommands, registerGuildCommands } = require('./schema');
 
 const client = new Client({
   intents: [
@@ -18,13 +21,20 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// Komutları yükle (bozuk dosya diğerlerini engellemesin)
+// Komutları yükle (her dosya build(lang) verir; iki dil de kaydedilir)
 const commandsPath = path.join(__dirname, 'commands');
 for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) {
   try {
-    const cmd = require(path.join(commandsPath, file));
-    if (cmd.data && cmd.execute) client.commands.set(cmd.data.name, cmd);
-    else console.error(`Komut atlandı (${file}): data/execute eksik`);
+    const mod = require(path.join(commandsPath, file));
+    if (!mod.build) {
+      console.error(`Komut atlandı (${file}): build eksik`);
+      continue;
+    }
+    for (const L of ['tr', 'en']) {
+      const cmd = mod.build(L);
+      if (cmd.data && cmd.execute) client.commands.set(cmd.data.name, cmd.execute);
+      else console.error(`Komut atlandı (${file}/${L}): data/execute eksik`);
+    }
   } catch (e) {
     console.error(`Komut yüklenemedi (${file}): ${e.message}`);
   }
@@ -47,17 +57,34 @@ for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
     console.error(`Event yüklenemedi (${file}): ${e.message}`);
   }
 }
-console.log(`${client.commands.size} komut, ${eventSayi} event yüklendi.`);
-if (typeof handleButton !== 'function') {
-  console.error('KRİTİK: buton karşılayıcı yüklenemedi, butonlar çalışmaz!');
-}
+console.log(`${client.commands.size} komut adı, ${eventSayi} event yüklendi.`);
 
-client.once(Events.ClientReady, c => {
+client.once(Events.ClientReady, async c => {
   console.log(`Giriş yapıldı: ${c.user.tag}`);
   // Sayaç kanalını 10 dakikada bir tazele
   setInterval(() => {
     c.guilds.cache.forEach(g => updateCounter(g).catch(() => {}));
   }, 10 * 60 * 1000);
+  // Komut şeması eski kalan sunucuları güncelle
+  try {
+    const sv = load('schema.json', {});
+    let degisti = false;
+    for (const g of c.guilds.cache.values()) {
+      if (sv[g.id] === CODE_VERSION) continue;
+      const lang = getLang(g.id);
+      try {
+        await registerGuildCommands(g.id, lang, c);
+        sv[g.id] = CODE_VERSION;
+        degisti = true;
+        console.log(`Komut şeması güncellendi: ${g.name} [${lang}]`);
+      } catch (e) {
+        console.error(`Şema güncellenemedi (${g.name}): ${e.message}`);
+      }
+    }
+    if (degisti) save('schema.json', sv);
+  } catch (e) {
+    console.error('Şema senkron hatası:', e.message);
+  }
 });
 
 client.on(Events.InteractionCreate, async interaction => {
@@ -66,21 +93,22 @@ client.on(Events.InteractionCreate, async interaction => {
       await handleButton(interaction);
     } catch (e) {
       console.error(e);
-      await interaction.reply({ content: 'İşlem sırasında hata oluştu!', ephemeral: true }).catch(() => {});
+      await interaction.reply({ content: t(getLang(interaction.guildId), 'err.btn'), ephemeral: true }).catch(() => {});
     }
     return;
   }
   if (!interaction.isChatInputCommand()) return;
-  const cmd = client.commands.get(interaction.commandName);
-  if (!cmd) return;
+  const exec = client.commands.get(interaction.commandName);
+  if (!exec) return;
   try {
-    await cmd.execute(interaction);
+    await exec(interaction);
   } catch (e) {
     console.error(e);
+    const msg = t(getLang(interaction.guildId), 'err.cmd');
     if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: 'Komutta hata oluştu!', ephemeral: true }).catch(() => {});
+      await interaction.followUp({ content: msg, ephemeral: true }).catch(() => {});
     } else {
-      await interaction.reply({ content: 'Komutta hata oluştu!', ephemeral: true }).catch(() => {});
+      await interaction.reply({ content: msg, ephemeral: true }).catch(() => {});
     }
   }
 });
