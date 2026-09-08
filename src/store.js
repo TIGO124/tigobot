@@ -1,7 +1,14 @@
 const fs = require('fs');
 const path = require('path');
 
-const dir = path.join(__dirname, 'data');
+const dir = process.env.DATA_DIR || path.join(__dirname, 'data');
+const kalici = Boolean(process.env.DATA_DIR);
+
+try {
+  fs.mkdirSync(dir, { recursive: true });
+} catch {}
+
+console.log(`Veri dizini: ${dir}${kalici ? ' (kalıcı)' : ' (geçici - güncelleme sıfırlar)'}`);
 
 function load(file, fallback) {
   try {
