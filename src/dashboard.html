@@ -172,6 +172,16 @@ tr:last-child td{border-bottom:none}
   </div>
 
   <div class="sec">
+    <h2>🌐 Bağlantı Sağlığı <span class="tag">nvidia</span></h2>
+    <p class="d">Railway'den NVIDIA'ya giden yolun kademeli ölçümü. Hangi adımda takıldığı sorunu gösterir.</p>
+    <div class="row" style="margin-bottom:12px">
+      <button class="btn" id="diagBtn">↻ Ölçümü Çalıştır</button>
+      <span class="pill" id="diagTime">henüz ölçülmedi</span>
+    </div>
+    <div id="diagOut"><div class="empty">AI çalışmıyorsa buradan ölç — sonuç hangi adımın bozuk olduğunu söyler.</div></div>
+  </div>
+
+  <div class="sec">
     <h2>🤖 Modeller <span class="tag" id="modelTag">—</span></h2>
     <p class="d">Kapalı model komut listelerinde görünmez, kimse seçemez. Kayıtlı seçimi kapanan kullanıcı varsayılana düşer.</p>
     <div class="row">
@@ -272,7 +282,7 @@ async function loadStats(){
     ['Ping', s.ping<0?'—':s.ping+'<span style="font-size:14px"> ms</span>', 'websocket'],
     ['Çalışma', esc(s.uptime), 'başlangıç: '+new Date(s.startedAt).toLocaleString('tr')],
     ['Bellek', esc(s.memHeap), 'rss '+esc(s.memRss)],
-    ['AI kuyruğu', s.queue, 'bekleyen iş'],
+    ['AI kuyruğu', s.queue, 'bekleyen iş (görsel: '+(s.imgQueue||0)+')'],
     ['Çalışma', esc(s.node), 'node sürümü'],
   ].map(([k,v,a],i)=>`<div class="card" style="animation-delay:${i*0.06}s"><div class="k">${k}</div><div class="v ${k==='Ping'?pingCls:''}">${v}</div><div class="s">${esc(a)}</div></div>`).join('');
   $('footStats').textContent = s.guilds+' sunucu • '+s.users+' kullanıcı • '+s.uptime;
@@ -335,6 +345,24 @@ async function loadModels(){
   const on = chatOn.length + d.img.filter(m=>m.enabled).length;
   $('modelTag').textContent = on + '/' + (d.chat.length + d.img.length) + ' açık';
 }
+function dSatir(ad, a){
+  const cls = !a ? '' : a.ok ? 'ok' : 'bad';
+  let v = '—';
+  if (a) v = a.ok ? (`OK${a.ms!==undefined?' ('+a.ms+'ms)':''}${a.status!==undefined?' ['+a.status+']':''}${a.modelSayisi!=null?' '+a.modelSayisi+' model':''}${a.adres?' '+esc(a.adres):''}`) : ('HATA: '+esc(a.hata||'?'));
+  return `<div>${esc(ad)}: <span class="${cls}">${v}</span></div>`;
+}
+async function loadDiag(){
+  const btn = $('diagBtn'); btn.disabled = true;
+  $('diagOut').innerHTML = '<div class="empty">ölçülüyor… (~20 sn sürebilir)</div>';
+  try {
+    const d = await api('/api/diag');
+    $('diagTime').textContent = new Date(d.zaman).toLocaleString('tr');
+    const blok = (baslik, r) => `<div class="mrow"><div class="grow"><b>${baslik}</b><code>${dSatir('DNS',r.dns)}${dSatir('TCP',r.tcp)}${dSatir('HTTPS',r.https)}${r.auth?dSatir('Auth',r.auth):''}${r.keyUzunluk?`<div>key uzunluğu: ${r.keyUzunluk}</div>`:''}</code></div></div>`;
+    $('diagOut').innerHTML = blok('integrate.api.nvidia.com (sohbet)', d.integrate) + blok('ai.api.nvidia.com (görsel)', d.genai);
+  } catch(e){ if (!/401/.test(e.message||'')) $('diagOut').innerHTML = '<div class="empty">ölçülemedi, tekrar dene.</div>'; }
+  btn.disabled = false;
+}
+$('diagBtn').onclick = loadDiag;
 async function postModel(payload, errMsg){
   try { return await api('/api/models', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); }
   catch(e){ if (!/401/.test(e.message||'')) alert(errMsg || 'Değişmedi, tekrar dene.'); throw e; }

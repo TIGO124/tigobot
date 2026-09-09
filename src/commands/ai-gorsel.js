@@ -1,7 +1,6 @@
 const { SlashCommandBuilder, AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const { t, getLang } = require('../i18n');
-const { generateImage, imgCooldownLeft, markImgCooldown, MAX_PROMPT } = require('../ai-image');
-const { kuyrugaEkle, siraBilgisi } = require('../ai');
+const { generateImage, imgKuyrugaEkle, imgSiraBilgisi, imgCooldownLeft, markImgCooldown, MAX_PROMPT } = require('../ai-image');
 const { guvenilirMi } = require('../trust');
 const { durumEmbed, animMetni } = require('../ai-progress');
 
@@ -28,7 +27,7 @@ function build(lang) {
     if (prompt.length > MAX_PROMPT) {
       return interaction.reply({ content: t(L, 'img.toolong', { max: MAX_PROMPT }), ephemeral: true });
     }
-    if (!process.env.NVIDIA_API_KEY) {
+    if (!(process.env.NVIDIA_API_KEY || '').trim()) {
       return interaction.reply({ content: t(L, 'img.nokey'), ephemeral: true });
     }
     const sahipMi = interaction.guild?.ownerId === interaction.user.id;
@@ -42,15 +41,15 @@ function build(lang) {
     await interaction.deferReply();
     const baslangic = animMetni(0, L);
     const mesaj = await interaction.editReply({ embeds: [durumEmbed(baslangic, L)] });
-    // Global AI kuyruğundan geçir (metin üretimleriyle çakışmasın)
-    const { jobId, sonuc } = kuyrugaEkle(interaction.user.id, interaction.user.tag, 'img', () =>
+    // Görsel kuyruğu metinden ayrıdır (asılan görsel /ai'yi bloklamaz)
+    const { jobId, sonuc } = imgKuyrugaEkle(interaction.user.id, interaction.user.tag, () =>
       generateImage(prompt, size, interaction.guildId));
     let bitti = false;
     let animI = 1;
     const timer = setInterval(async () => {
       if (bitti) return;
       try {
-        const b = siraBilgisi(jobId);
+        const b = imgSiraBilgisi(jobId);
         const metin = !b || b.sira <= 1 ? animMetni(animI++, L) : '```diff\n' + t(L, 'ai.queue', { s: b.sira, t: b.toplam, o: b.sira - 1 }) + '\n```';
         await mesaj.edit({ embeds: [durumEmbed(metin, L)] }).catch(() => {});
       } catch {}

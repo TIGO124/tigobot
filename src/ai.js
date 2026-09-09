@@ -44,10 +44,11 @@ async function chat(model, messages, lang) {
   const L = lang === 'en' ? 'en' : 'tr';
   const tum = [{ role: 'system', content: t(L, 'sys.prompt') }, ...messages];
   if (model.kind === 'nvidia') {
-    if (!process.env.NVIDIA_API_KEY) {
+    const key = (process.env.NVIDIA_API_KEY || '').trim();
+    if (!key) {
       throw new Error('NVIDIA_API_KEY ayarlı değil. Railway Variables kısmına ekle.');
     }
-    return callOpenAI(NVIDIA_BASE, process.env.NVIDIA_API_KEY, model.model, tum, 180000);
+    return callOpenAI(NVIDIA_BASE, key, model.model, tum, 180000);
   }
   const base = (process.env.AI_BASE_URL || '').replace(/\/+$/, '');
   if (!acikMi() || !base) {
@@ -112,7 +113,11 @@ async function uretimYap(model, yedekModel, messages, lang) {
       const text = await chat(yedekModel, messages, lang);
       return { text, model: yedekModel, note: '' };
     }
-    if (model.kind === 'nvidia' && /\(404\)/.test(e.message || '') && model.key !== yedekModel.key) {
+    const msg = String((e && e.message) || '');
+    // Auth (401/403) ve bozuk istek (400) dışında her şeyde yedeği dene:
+    // 404/410 (model kalkmış), 422, 429, 5xx, timeout, bağlantı hatası.
+    const olumcul = /401|403/.test(msg) || /AI hatası \(400\)/.test(msg);
+    if (model.kind === 'nvidia' && !olumcul && model.key !== yedekModel.key) {
       const text = await chat(yedekModel, messages, lang);
       return { text, model: yedekModel, note: t(lang, 'ai.fallback.nvidia') };
     }

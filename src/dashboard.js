@@ -8,9 +8,11 @@ const fs = require('fs');
 const path = require('path');
 const { getStats } = require('./stats');
 const { getLogs } = require('./logger');
+const { runDiag } = require('./diag');
 const { load } = require('./store');
 const { getLang } = require('./i18n');
 const { queueDepth } = require('./ai');
+const { imgQueueDepth } = require('./ai-image');
 const { acikMi, ayarla } = require('./local');
 const { allModels, isChatEnabled, setChatEnabled, getGlobalModel, setGlobalModel, getGuildModelKey, setGuildModel, effectiveModel } = require('./ai-models');
 const { IMG_MODELS, isImgEnabled, setImgEnabled, getGlobalImgModel, setGlobalImgModel, getGuildImgModelKey, setGuildImgModel, effectiveImgModel } = require('./ai-image');
@@ -79,7 +81,7 @@ function start(client) {
       }
       if (req.method === 'GET' && url.pathname === '/api/stats') {
         if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
-        return json(res, 200, { ...getStats(client), queue: queueDepth(), online: isOnline(client) });
+        return json(res, 200, { ...getStats(client), queue: queueDepth(), imgQueue: imgQueueDepth(), online: isOnline(client) });
       }
       if (req.method === 'GET' && url.pathname === '/api/config') {
         if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
@@ -153,6 +155,14 @@ function start(client) {
             json(res, 400, { error: 'bad json' });
           }
         });
+        return;
+      }
+      if (req.method === 'GET' && url.pathname === '/api/diag') {
+        if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
+        runDiag().then(
+          d => json(res, 200, d),
+          () => json(res, 500, { error: 'diag failed' })
+        );
         return;
       }
       if (req.method === 'POST' && url.pathname === '/api/power') {

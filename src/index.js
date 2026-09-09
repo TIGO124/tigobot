@@ -1,5 +1,6 @@
 require('dotenv').config();
 require('./logger').install();
+require('./guards').installGuards();
 const fs = require('fs');
 const path = require('path');
 const { Client, Collection, GatewayIntentBits, Events } = require('discord.js');

@@ -10,6 +10,17 @@ const { load, save } = require('./store');
 const GENAI_BASE = 'https://ai.api.nvidia.com/v1/genai';
 const IMG_COOLDOWN_MS = 60 * 1000;
 const MAX_PROMPT = 500;
+// Bütçeler (env ile ezilebilir; testler kısa tutar):
+// - deneme başına en fazla 150 sn (üretim + kuyruk için yeterli)
+// - iş başına toplam en fazla 7 dk (Discord 15 dk etkileşim limitinin içinde)
+function attemptMs() {
+  const v = parseInt(process.env.IMG_ATTEMPT_MS, 10);
+  return v > 0 ? v : 150000;
+}
+function deadlineMs() {
+  const v = parseInt(process.env.IMG_DEADLINE_MS, 10);
+  return v > 0 ? v : 7 * 60 * 1000;
+}
 
 // Desteklenen çözünürlükler model sayfasındaki listelerden (kare/dikey/yatay).
 const IMG_MODELS = [
@@ -105,8 +116,8 @@ function effectiveImgModel(guildId) {
   return getGlobalImgModel();
 }
 
-async function callImage(model, prompt, size) {
-  const apiKey = process.env.NVIDIA_API_KEY;
+async function callImage(model, prompt, size, budgetMs) {
+  const apiKey = (process.env.NVIDIA_API_KEY || '').trim();
   if (!apiKey) throw new Error('NVIDIA_API_KEY ayarlı değil. Railway Variables kısmına ekle.');
   const { w, h } = (model.sizes && model.sizes[size]) || model.sizes.square;
   const payload = JSON.stringify({
@@ -116,9 +127,10 @@ async function callImage(model, prompt, size) {
     seed: Math.floor(Math.random() * 1000000),
     steps: model.steps,
   });
-  // Ağ dalgalanmasına karşı 3 deneme (sadece bağlantı hatalarında; HTTP 4xx'te değil)
+  const limit = Math.max(5000, Math.min(attemptMs(), budgetMs));
+  // Ağ dalgalanmasına karşı en fazla 2 deneme (sadece bağlantı hatalarında; HTTP 4xx'te değil)
   let lastNetErr = null;
-  for (let deneme = 1; deneme <= 3; deneme++) {
+  for (let deneme = 1; deneme <= 2; deneme++) {
     let res;
     try {
       res = await fetch(`${GENAI_BASE}/${model.id}`, {
@@ -129,11 +141,12 @@ async function callImage(model, prompt, size) {
           Authorization: `Bearer ${apiKey}`,
         },
         body: payload,
-        signal: AbortSignal.timeout(180000),
+        signal: AbortSignal.timeout(limit),
       });
     } catch (e) {
       lastNetErr = e;
-      await new Promise(r => setTimeout(r, 2000 * deneme));
+      if (deneme < 2 && budgetMs > 45000) await new Promise(r => setTimeout(r, 2000));
+      else break;
       continue;
     }
     if (!res.ok) {
@@ -157,21 +170,63 @@ async function callImage(model, prompt, size) {
 }
 
 async function generateImage(prompt, size, guildId) {
-  // Sunucu özeli önce, sonra global, sonra diğer AÇIK modeller yedek (key hatasında durulur)
+  // Sunucu özeli önce, sonra global, sonra diğer AÇIK modeller yedek (key hatasında durulur).
+  // Toplam bütçe aşılırsa zaman aşımı hatası verilir (sonsuz "oluşturuluyor" yok).
+  const baslangic = Date.now();
+  const kalan = () => deadlineMs() - (Date.now() - baslangic);
   const havuz = enabledImgModels();
   const ilk = havuz.find(m => m.key === effectiveImgModel(guildId).key) || havuz[0];
   const sira = [ilk, ...havuz.filter(m => m.key !== ilk.key)];
   let lastErr = null;
   for (const m of sira) {
+    if (kalan() <= 5000) break;
     try {
-      return await callImage(m, prompt, size);
+      return await callImage(m, prompt, size, kalan());
     } catch (e) {
       lastErr = e;
       // Key hatasında diğer modeli denemenin anlamı yok, dur
       if (/401|403/.test(e.message || '')) throw e;
     }
   }
-  throw lastErr || new Error('Görsel üretilemedi.');
+  if (lastErr && /401|403|NVIDIA_API_KEY|400|404|422/.test(lastErr.message || '')) throw lastErr;
+  const dk = Math.round(deadlineMs() / 60000);
+  const sure = dk >= 1 ? `${dk} dk` : `${Math.round(deadlineMs() / 1000)} sn`;
+  throw new Error(sanitize(`Görsel zaman aşımı (${sure}): NVIDIA şu anda cevap vermiyor. ${lastErr ? String(lastErr.message || '').slice(0, 120) : ''}`));
+}
+
+// Görsele özel FIFO kuyruk (metin kuyruğundan ayrı: asılan görsel /ai'yi bloklamaz).
+const imgBekleyenler = [];
+let imgAktif = null;
+let imgSayac = 0;
+
+function imgSiradaki() {
+  if (imgAktif) return;
+  const job = imgBekleyenler.shift();
+  if (!job) return;
+  imgAktif = job;
+  job.is().then(
+    sonuc => { imgAktif = null; job.resolve(sonuc); imgSiradaki(); },
+    hata => { imgAktif = null; job.reject(hata); imgSiradaki(); }
+  );
+}
+
+function imgKuyrugaEkle(userId, userTag, is) {
+  const job = { id: ++imgSayac, userId, userTag, is, resolve: null, reject: null };
+  const sonuc = new Promise((resolve, reject) => { job.resolve = resolve; job.reject = reject; });
+  imgBekleyenler.push(job);
+  imgSiradaki();
+  return { jobId: job.id, sonuc };
+}
+
+function imgSiraBilgisi(jobId) {
+  if (imgAktif && imgAktif.id === jobId) return { sira: 1, toplam: imgBekleyenler.length + 1 };
+  const idx = imgBekleyenler.findIndex(j => j.id === jobId);
+  if (idx === -1) return null;
+  return { sira: idx + 2, toplam: imgBekleyenler.length + 1 };
+}
+
+function imgQueueDepth() {
+  return imgBekleyenler.length + (imgAktif ? 1 : 0);
 }
 
 // Ayrı cooldown: görsel üretim pahalı, 60 sn
@@ -186,4 +241,4 @@ function markImgCooldown(userId, guildId) {
   beklemeImg.set(guildId ? `${guildId}:${userId}` : `dm:${userId}`, Date.now());
 }
 
-module.exports = { generateImage, findImgModel, imgModelName, enabledImgModels, isImgEnabled, setImgEnabled, getGlobalImgModel, setGlobalImgModel, getGuildImgModelKey, setGuildImgModel, effectiveImgModel, imgCooldownLeft, markImgCooldown, MAX_PROMPT, IMG_MODELS };
+module.exports = { generateImage, findImgModel, imgModelName, enabledImgModels, isImgEnabled, setImgEnabled, getGlobalImgModel, setGlobalImgModel, getGuildImgModelKey, setGuildImgModel, effectiveImgModel, imgKuyrugaEkle, imgSiraBilgisi, imgQueueDepth, imgCooldownLeft, markImgCooldown, MAX_PROMPT, IMG_MODELS };
