@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { t, getLang } = require('../i18n');
-const { allModels, getUserModel, setUserModel, modelName } = require('../ai-models');
+const { allModels, getUserModel, setUserModel, findModel, modelName } = require('../ai-models');
+const { acikMi } = require('../local');
 
 const NAMES = { tr: 'aimodels', en: 'aimodels' };
 
@@ -31,6 +32,13 @@ function build(lang) {
       return interaction.reply({ embeds: [embed] });
     }
     // Model seçimi kişiseldir: herkes kendi modelini seçebilir
+    const secilen = findModel(key);
+    if (!secilen) {
+      return interaction.reply({ content: t(L, 'ai.unknownModel'), ephemeral: true });
+    }
+    if (secilen.kind === 'local' && !acikMi()) {
+      return interaction.reply({ content: t(L, 'aim.localOff'), ephemeral: true });
+    }
     const m = setUserModel(interaction.user.id, key);
     if (!m) {
       return interaction.reply({ content: t(L, 'ai.unknownModel'), ephemeral: true });
