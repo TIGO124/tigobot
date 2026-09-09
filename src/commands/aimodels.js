@@ -50,7 +50,7 @@ function build(lang) {
     if (!m) {
       return interaction.reply({ content: t(L, 'ai.unknownModel'), ephemeral: true });
     }
-    await interaction.reply(t(L, 'aim.changed', { m: modelName(m, L) }));
+    await interaction.reply({ content: t(L, 'aim.changed', { m: modelName(m, L) }), ephemeral: true });
   }
 
   return { data, execute };

@@ -112,7 +112,11 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, guildId, model, yedek,
     clearInterval(timer);
     // Başarılı cevabı hafızaya yaz (sonraki sorularda bağlam olur)
     try { pushHistory(userId, guildId, soru, res.text); } catch {}
-    await kademeliGoster(mesaj, ekGonder, lang, (res.note ? res.note + '\n\n' : '') + res.text);
+    // Yedek-not kullanıcıya gösterilmez (model kimliği gizli); loga düşer
+    if (res.note) {
+      try { console.log(`AI yedek model devreye girdi (${guildId || 'DM'}/${userTag}): ${res.note}`); } catch {}
+    }
+    await kademeliGoster(mesaj, ekGonder, lang, res.text);
   } catch (e) {
     bitti = true;
     clearInterval(timer);
