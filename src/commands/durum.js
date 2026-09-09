@@ -1,23 +1,13 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { t, getLang } = require('../i18n');
 const { getUserModel, modelName } = require('../ai-models');
-const { acikMi } = require('../local');
+const { yerelHazirMi } = require('../ai');
 
 const NAMES = { tr: 'durum', en: 'status' };
 
 async function yerelKontrol() {
-  if (!acikMi()) return { bagli: false };
-  const base = (process.env.AI_BASE_URL || '').replace(/\/+$/, '');
-  if (!base) return { bagli: false };
-  try {
-    const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return { bagli: false };
-    const data = await res.json();
-    const sayi = (data.models || []).length;
-    return { bagli: true, sayi };
-  } catch {
-    return { bagli: false };
-  }
+  const h = await yerelHazirMi();
+  return h.hazir ? { bagli: true, sayi: h.sayi } : { bagli: false };
 }
 
 function build(lang) {

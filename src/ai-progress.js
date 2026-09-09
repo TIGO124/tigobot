@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { kuyrugaEkle, siraBilgisi, uretimYap } = require('./ai');
+const { kuyrugaEkle, siraBilgisi, uretimYap, yerelHazirMi } = require('./ai');
 const { sanitize, kullaniciMesaji } = require('./sanitize');
 const { t, getLang, setLang } = require('./i18n');
 const { detectLang } = require('./langdetect');
@@ -76,8 +76,17 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, guildId, model, yedek,
       } catch {}
     }
   }
-  const { jobId, sonuc } = kuyrugaEkle(userId, userTag, modelName(model, lang), () =>
-    uretimYap(model, yedek, [{ role: 'user', content: soru }], lang)
+  // Yerel seçiliyse önden erişim kontrolü: kapalıysa durum/animasyon
+  // en baştan yedek modeli gösterir, cevapla tutarlı olur.
+  let aktifModel = model;
+  if (model.kind === 'local') {
+    try {
+      const h = await yerelHazirMi();
+      if (!h.hazir) aktifModel = yedek;
+    } catch {}
+  }
+  const { jobId, sonuc } = kuyrugaEkle(userId, userTag, modelName(aktifModel, lang), () =>
+    uretimYap(aktifModel, yedek, [{ role: 'user', content: soru }], lang)
   );
   let animI = 1;
   let sonMetin = baslangic || null;
@@ -88,7 +97,7 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, guildId, model, yedek,
       const metin = !b || b.sira <= 1 ? animMetni(animI++, lang) : kuyrukMetni(b.sira, b.toplam, lang);
       if (metin !== sonMetin) {
         sonMetin = metin;
-        await mesaj.edit({ embeds: [durumEmbed(metin, modelName(model, lang), lang)] });
+        await mesaj.edit({ embeds: [durumEmbed(metin, modelName(aktifModel, lang), lang)] });
       }
     } catch {}
   };

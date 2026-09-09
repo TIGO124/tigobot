@@ -142,4 +142,20 @@ function splitText(text, max = 2000) {
   return parts;
 }
 
-module.exports = { chat, uretimYap, kuyrugaEkle, siraBilgisi, splitText, cooldownLeft, markCooldown, MAX_SORU };
+// Yerel servise hızlı bakış (akış başında hangi modelin cevaplayacağını bilmek için).
+// Kapalı/adres yoksa anında döner; ağ takılırsa en fazla ~5 sn sürer.
+async function yerelHazirMi() {
+  if (!acikMi()) return { hazir: false, sayi: 0 };
+  const base = (process.env.AI_BASE_URL || '').replace(/\/+$/, '');
+  if (!base) return { hazir: false, sayi: 0 };
+  try {
+    const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return { hazir: false, sayi: 0 };
+    const data = await res.json();
+    return { hazir: true, sayi: (data.models || []).length };
+  } catch {
+    return { hazir: false, sayi: 0 };
+  }
+}
+
+module.exports = { chat, uretimYap, kuyrugaEkle, siraBilgisi, splitText, cooldownLeft, markCooldown, MAX_SORU, yerelHazirMi };
