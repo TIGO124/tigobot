@@ -51,6 +51,11 @@ function build(lang) {
     });
     const polls = load('ankets.json', {});
     polls[pollId] = { messageId: msg.id, channelId: msg.channelId, guildId: interaction.guildId, soru, secenekler, counts: secenekler.map(() => 0), voters: {} };
+    // Eski anketler birikmesin: en son 50 tanesi tutulur
+    const keys = Object.keys(polls);
+    if (keys.length > 50) {
+      for (const k of keys.slice(0, keys.length - 50)) delete polls[k];
+    }
     save('ankets.json', polls);
   }
 

@@ -126,6 +126,7 @@ function cooldownLeft(userId, guildId) {
   return kalan > 0 ? Math.ceil(kalan / 1000) : 0;
 }
 function markCooldown(userId, guildId) {
+  if (bekleme.size > 5000) bekleme.clear();
   bekleme.set(anahtar(userId, guildId), Date.now());
 }
 
