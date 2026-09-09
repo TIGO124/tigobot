@@ -48,11 +48,10 @@ function configSummary(client) {
 
 function tokenOk(req) {
   const need = process.env.DASHBOARD_TOKEN;
-  if (!need) return true; // korumasız mod (local test)
-  const url = new URL(req.url, 'http://x');
-  const q = url.searchParams.get('token');
+  if (!need) return true; // korumasız mod (sadece localhost'ta risk düşük)
+  // Sadece header kabul edilir: ?token= geçmişe/loga düşmesin.
   const h = req.headers['x-dashboard-token'];
-  return (q && q === need) || (h && h === need);
+  return !!h && h === need;
 }
 
 function isOnline(client) {
@@ -221,7 +220,16 @@ function start(client) {
       json(res, 500, { error: 'internal' });
     }
   });
-  server.listen(port, () => console.log(`Panel açık: http://localhost:${port}`));
+  // Panel varsayılan olarak SADECE yerel makineye (127.0.0.1) bağlanır:
+  // public domain / dış ağ erişimi kapalıdır. Erişim için:
+  //  - Yerelde: http://localhost:PORT
+  //  - Railway'de: `railway connect` (port forward) ile yerel tünel.
+  // Dışarıya açmak İSTENMİYORSA DASHBOARD_HOST değişkenini 0.0.0.0 yapma.
+  const host = process.env.DASHBOARD_HOST || '127.0.0.1';
+  server.listen(port, host, () => {
+    const erisim = host === '127.0.0.1' ? 'sadece-yerel' : 'dışa-açık';
+    console.log(`Panel açık: http://${host === '0.0.0.0' ? 'localhost' : host}:${port} (${erisim})`);
+  });
   if (!process.env.DASHBOARD_TOKEN) {
     console.log('UYARI: DASHBOARD_TOKEN yok, panel korumasız! Railway Variables kısmına ekle.');
   }

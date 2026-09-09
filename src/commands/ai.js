@@ -4,6 +4,7 @@ const { effectiveModel, defaultNvidia } = require('../ai-models');
 const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
 const { guvenilirMi } = require('../trust');
 const { aiAkis, durumEmbed, animMetni } = require('../ai-progress');
+const { isBlocked, blockRemainingMs } = require('../quota');
 
 const NAMES = { tr: 'ai', en: 'ai' };
 
@@ -20,7 +21,13 @@ function build(lang) {
       return interaction.reply({ content: t(L, 'ai.toolong', { max: MAX_SORU }), ephemeral: true });
     }
     const sahipMi = interaction.guild?.ownerId === interaction.user.id;
-    if (!guvenilirMi(interaction.guildId, interaction.user.id, sahipMi)) {
+    const guvenilir = guvenilirMi(interaction.guildId, interaction.user.id, sahipMi);
+    // Token kotası: blokluysa güvenilir kullanıcı bile kullanamaz (kotayı aşan kullanıcı)
+    if (isBlocked(interaction.user.id)) {
+      const saat = Math.max(1, Math.ceil(blockRemainingMs(interaction.user.id) / 3600000));
+      return interaction.reply({ content: t(L, 'quota.blocked', { h: saat }), ephemeral: true });
+    }
+    if (!guvenilir) {
       const kalan = cooldownLeft(interaction.user.id, interaction.guildId);
       if (kalan > 0) {
         return interaction.reply({ content: t(L, 'ai.cooldown', { kalan }), ephemeral: true });

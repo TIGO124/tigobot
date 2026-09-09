@@ -4,6 +4,7 @@ const { sanitize, kullaniciMesaji } = require('./sanitize');
 const { t, getLang, setLang } = require('./i18n');
 const { detectLang } = require('./langdetect');
 const { getHistory, pushHistory, MAX_TUR } = require('./memory');
+const { addUsage } = require('./quota');
 
 function durumEmbed(metin, lang) {
   // Model adı bilerek yazılmaz: aktif model sadece owner/panel tarafından bilinir.
@@ -112,6 +113,8 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, guildId, model, yedek,
     clearInterval(timer);
     // Başarılı cevabı hafızaya yaz (sonraki sorularda bağlam olur)
     try { pushHistory(userId, guildId, soru, res.text); } catch {}
+    // Token kotası: üretimden dönen token kullanımını işle
+    try { if (res.usage > 0) addUsage(userId, res.usage); } catch {}
     // Yedek-not kullanıcıya gösterilmez (model kimliği gizli); loga düşer
     if (res.note) {
       try { console.log(`AI yedek model devreye girdi (${guildId || 'DM'}/${userTag}): ${res.note}`); } catch {}

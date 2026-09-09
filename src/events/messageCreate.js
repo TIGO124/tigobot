@@ -5,6 +5,9 @@ const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
 const { guvenilirMi } = require('../trust');
 const { t, getLang } = require('../i18n');
 const { aiAkis, durumEmbed, animMetni } = require('../ai-progress');
+const { isBlocked, blockRemainingMs } = require('../quota');
+const { bul: otocevapBul } = require('../otocevap');
+const { clip } = require('../sanitize');
 
 // İsmi geçen veya etiketlenen mesajlarda bota soru sorulmuş sayılır.
 // Örnek: "nasılsın tigobot" -> soru "nasılsın" olur.
@@ -26,7 +29,14 @@ async function handleMention(message) {
     return true;
   }
   const sahipMi = message.guild?.ownerId === message.author.id;
-  if (!guvenilirMi(message.guildId, message.author.id, sahipMi)) {
+  const guvenilir = guvenilirMi(message.guildId, message.author.id, sahipMi);
+  // Token kotası: blokluysa güvenilir kullanıcı bile kullanamaz
+  if (isBlocked(message.author.id)) {
+    const saat = Math.max(1, Math.ceil(blockRemainingMs(message.author.id) / 3600000));
+    await message.reply(t(L0, 'quota.blocked', { h: saat }));
+    return true;
+  }
+  if (!guvenilir) {
     const kalan = cooldownLeft(message.author.id, message.guildId);
     if (kalan > 0) {
       await message.reply(t(L0, 'ai.cooldown', { kalan }));
@@ -61,6 +71,15 @@ module.exports = {
   name: Events.MessageCreate,
   async execute(message) {
     if (message.author.bot) return;
+
+    // Sahibin tanımladığı sabit cevaplar AI'dan önce gelir
+    try {
+      const oto = otocevapBul(message.content, message.client.user.id);
+      if (oto) {
+        try { await message.reply(clip(oto, 2000)); } catch {}
+        return;
+      }
+    } catch {}
 
     try {
       if (await handleMention(message)) return;

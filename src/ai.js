@@ -29,7 +29,9 @@ async function callOpenAI(base, apiKey, model, messages, timeoutMs) {
     ? String(data.choices[0].message.content || '').trim()
     : '';
   if (!text) throw new Error('AI boş cevap verdi.');
-  return text;
+  // Token kullanımı (varsa) kota için döner; okuyamazsa 0.
+  const usage = data.usage && Number(data.usage.total_tokens) > 0 ? Number(data.usage.total_tokens) : 0;
+  return { text, usage };
 }
 
 function erisilemezMi(e) {
@@ -106,20 +108,20 @@ function queueDepth() {
 
 async function uretimYap(model, yedekModel, messages, lang) {
   try {
-    const text = await chat(model, messages, lang);
-    return { text, model, note: '' };
+    const { text, usage } = await chat(model, messages, lang);
+    return { text, usage, model, note: '' };
   } catch (e) {
     if (e && e.code === 'LOCAL_UNREACHABLE') {
-      const text = await chat(yedekModel, messages, lang);
-      return { text, model: yedekModel, note: '' };
+      const { text, usage } = await chat(yedekModel, messages, lang);
+      return { text, usage, model: yedekModel, note: '' };
     }
     const msg = String((e && e.message) || '');
     // Auth (401/403) ve bozuk istek (400) dışında her şeyde yedeği dene:
     // 404/410 (model kalkmış), 422, 429, 5xx, timeout, bağlantı hatası.
     const olumcul = /401|403/.test(msg) || /AI hatası \(400\)/.test(msg);
     if (model.kind === 'nvidia' && !olumcul && model.key !== yedekModel.key) {
-      const text = await chat(yedekModel, messages, lang);
-      return { text, model: yedekModel, note: t(lang, 'ai.fallback.nvidia') };
+      const { text, usage } = await chat(yedekModel, messages, lang);
+      return { text, usage, model: yedekModel, note: t(lang, 'ai.fallback.nvidia') };
     }
     throw e;
   }
