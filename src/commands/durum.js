@@ -25,12 +25,10 @@ function build(lang) {
       .setTitle(t(L, 'status.title'))
       .setColor(0x5865F2)
       .addFields(
+        { name: t(L, 'status.f.ping'), value: st.ping >= 0 ? `${st.ping}ms` : t(L, 'uinfo.unknown'), inline: true },
         { name: t(L, 'status.f.local'), value: yerel.bagli ? t(L, 'status.local.on', { n: yerel.sayi }) : t(L, 'status.local.off'), inline: true },
         { name: t(L, 'status.f.nvidia'), value: nvidiaKey ? t(L, 'status.nvidia.on') : t(L, 'status.nvidia.off'), inline: true },
         { name: t(L, 'status.f.uptime'), value: st.uptime, inline: true },
-        { name: t(L, 'status.f.mem'), value: `${st.memHeap} / ${st.memRss}`, inline: true },
-        { name: t(L, 'status.f.servers'), value: t(L, 'status.servers', { g: st.guilds, u: st.users }), inline: true },
-        { name: t(L, 'status.f.net'), value: t(L, 'status.net', { ping: st.ping >= 0 ? st.ping : '—', node: st.node, cmd: st.commands }), inline: false },
       )
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });
