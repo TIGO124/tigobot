@@ -1,6 +1,8 @@
 // Basit web panel: sıfır bağımlılık (node:http).
-// DASHBOARD_PORT tanımlıysa index.js'ten start(client) çağrılır.
-// Okuma endpointleri açık; yazma (/api/local) DASHBOARD_TOKEN ister.
+// DASHBOARD_PORT (yoksa PORT) tanımlıysa index.js'ten start(client) çağrılır.
+// DASHBOARD_TOKEN tanımlıysa TÜM /api/* endpointleri token ister (header
+// x-dashboard-token veya ?token=). Tanımlı değilse panel korumasız açılır
+// (sadece local test için) ve açılışta uyarı basılır.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -10,7 +12,8 @@ const { load } = require('./store');
 const { getLang } = require('./i18n');
 const { queueDepth } = require('./ai');
 const { acikMi, ayarla } = require('./local');
-const { allModels } = require('./ai-models');
+const { allModels, isChatEnabled, setChatEnabled, getGlobalModel, setGlobalModel, getGuildModelKey, setGuildModel, effectiveModel } = require('./ai-models');
+const { IMG_MODELS, isImgEnabled, setImgEnabled, getGlobalImgModel, setGlobalImgModel } = require('./ai-image');
 
 function guildList(client) {
   const out = [];
@@ -43,11 +46,18 @@ function configSummary(client) {
 
 function tokenOk(req) {
   const need = process.env.DASHBOARD_TOKEN;
-  if (!need) return false;
+  if (!need) return true; // korumasız mod (local test)
   const url = new URL(req.url, 'http://x');
   const q = url.searchParams.get('token');
   const h = req.headers['x-dashboard-token'];
-  return q === need || h === need;
+  return (q && q === need) || (h && h === need);
+}
+
+function isOnline(client) {
+  try {
+    if (client && typeof client.isReady === 'function') return client.isReady();
+  } catch {}
+  return false;
 }
 
 function json(res, code, obj) {
@@ -68,19 +78,111 @@ function start(client) {
         return res.end(html);
       }
       if (req.method === 'GET' && url.pathname === '/api/stats') {
-        return json(res, 200, { ...getStats(client), queue: queueDepth() });
+        if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
+        return json(res, 200, { ...getStats(client), queue: queueDepth(), online: isOnline(client) });
       }
       if (req.method === 'GET' && url.pathname === '/api/config') {
+        if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
         return json(res, 200, configSummary(client));
       }
       if (req.method === 'GET' && url.pathname === '/api/logs') {
+        if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
         const level = url.searchParams.get('level') || '';
         let logs = getLogs(url.searchParams.get('limit') || 120);
         if (level) logs = logs.filter(l => l.level === level);
         return json(res, 200, logs);
       }
+      if (req.method === 'GET' && url.pathname === '/api/models') {
+        if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
+        return json(res, 200, {
+          globalChat: getGlobalModel().key,
+          globalImg: getGlobalImgModel().key,
+          chat: allModels().map(m => ({
+            key: m.key, name: (m.name && m.name.tr) || m.key, kind: m.kind,
+            api: m.model, enabled: isChatEnabled(m.key),
+          })),
+          img: IMG_MODELS.map(m => ({
+            key: m.key, name: (m.name && m.name.tr) || m.id,
+            api: m.id, enabled: isImgEnabled(m.key),
+          })),
+          guilds: guildList(client).map(g => ({
+            ...g, model: getGuildModelKey(g.id), effective: effectiveModel(g.id).key,
+          })),
+        });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/models') {
+        if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
+        let body = '';
+        req.on('data', c => { body += c; });
+        req.on('end', () => {
+          try {
+            const { type, key, enabled, guildId } = JSON.parse(body || '{}');
+            if (type === 'img') {
+              if (!setImgEnabled(key, enabled === true)) return json(res, 400, { error: 'bilinmeyen model' });
+              return json(res, 200, { key, enabled: enabled === true });
+            }
+            if (type === 'globalImg') {
+              const m = setGlobalImgModel(key);
+              if (!m) return json(res, 400, { error: 'bilinmeyen model' });
+              return json(res, 200, { key: m.key });
+            }
+            if (type === 'globalChat') {
+              const m = setGlobalModel(key);
+              if (!m) return json(res, 400, { error: 'bilinmeyen model' });
+              return json(res, 200, { key: m.key });
+            }
+            if (type === 'guildChat') {
+              if (!guildId) return json(res, 400, { error: 'guildId gerekli' });
+              const m = setGuildModel(guildId, key === null ? null : key);
+              if (key !== null && !m) return json(res, 400, { error: 'bilinmeyen model' });
+              return json(res, 200, { guildId, key: key === null ? null : m.key });
+            }
+            if (type === 'chat') {
+              if (!setChatEnabled(key, enabled === true)) return json(res, 400, { error: 'bilinmeyen model' });
+              return json(res, 200, { key, enabled: enabled === true });
+            }
+            json(res, 400, { error: 'bilinmeyen istek' });
+          } catch {
+            json(res, 400, { error: 'bad json' });
+          }
+        });
+        return;
+      }
+      if (req.method === 'POST' && url.pathname === '/api/power') {
+        if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
+        let body = '';
+        req.on('data', c => { body += c; });
+        req.on('end', async () => {
+          try {
+            const action = (JSON.parse(body || '{}').action || '').toLowerCase();
+            if (action === 'stop') {
+              if (!isOnline(client)) return json(res, 200, { online: false, msg: 'zaten çevrimdışı' });
+              await client.destroy();
+              console.log('Panel: bot durduruldu.');
+              return json(res, 200, { online: false });
+            }
+            if (action === 'start') {
+              if (isOnline(client)) return json(res, 200, { online: true, msg: 'zaten çevrimiçi' });
+              if (!process.env.TOKEN) return json(res, 500, { error: 'TOKEN eksik' });
+              await client.login(process.env.TOKEN);
+              console.log('Panel: bot başlatıldı.');
+              return json(res, 200, { online: true });
+            }
+            if (action === 'restart') {
+              json(res, 200, { restarting: true });
+              console.log('Panel: yeniden başlatılıyor...');
+              setTimeout(() => process.exit(0), 600); // Railway container'ı yeniden başlatır
+              return;
+            }
+            json(res, 400, { error: 'action: stop/start/restart gerekli' });
+          } catch (e) {
+            json(res, 500, { error: 'güç işlemi başarısız' });
+          }
+        });
+        return;
+      }
       if (req.method === 'POST' && url.pathname === '/api/local') {
-        if (!tokenOk(req)) return json(res, 403, { error: 'forbidden' });
+        if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
         let body = '';
         req.on('data', c => { body += c; });
         req.on('end', () => {
@@ -103,6 +205,9 @@ function start(client) {
     }
   });
   server.listen(port, () => console.log(`Panel açık: http://localhost:${port}`));
+  if (!process.env.DASHBOARD_TOKEN) {
+    console.log('UYARI: DASHBOARD_TOKEN yok, panel korumasız! Railway Variables kısmına ekle.');
+  }
   return server;
 }
 

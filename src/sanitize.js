@@ -23,10 +23,10 @@ function kullaniciMesaji(e, lang) {
   const ham = sanitize(e && e.message ? e.message : String(e));
   if (ham) console.error('İç hata (sadece logda):', ham);
   if (/NVIDIA_API_KEY/i.test(ham)) return t(L, 'err.ai.unavailable');
-  if (/AI hatası \((5|429)/.test(ham) || /timeout|zaman aşımı/i.test(ham)) {
+  if (/hatası \((5|429)/.test(ham) || /timeout|zaman aşımı/i.test(ham)) {
     return t(L, 'err.ai.busy');
   }
-  if (/AI hatası \(4/i.test(ham)) return t(L, 'err.ai.bad');
+  if (/hatası \(4/i.test(ham)) return t(L, 'err.ai.bad');
   if (/boş cevap/i.test(ham)) return t(L, 'err.ai.empty');
   return t(L, 'err.generic');
 }

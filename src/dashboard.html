@@ -96,12 +96,39 @@ tr:last-child td{border-bottom:none}
 .logbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
 .logbar select{background:var(--panel);color:var(--ink);border:1px solid var(--line);
   border-radius:10px;padding:8px 12px;font-size:12px;font-family:'JetBrains Mono'}
+.mrow{display:flex;align-items:center;gap:12px;padding:9px 12px;border:1px solid var(--line);
+  border-radius:12px;margin-bottom:8px;background:var(--panel)}
+.mrow.off{opacity:.55}
+.mrow b{font-size:13px;display:block}
+.mrow code{font-size:10.5px;color:var(--dim);font-family:'JetBrains Mono';word-break:break-all}
+.mrow .grow{flex:1;min-width:0}
+.mrow .kind{font-size:9.5px;border:1px solid var(--line);border-radius:6px;padding:2px 7px;
+  color:var(--cyan);font-family:'JetBrains Mono';flex:none}
+.sel{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;
+  padding:9px 12px;font-size:12.5px;font-family:'Sora';width:100%;outline:none}
+.sel:focus{border-color:var(--blurple)}
+.flabel{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px}
 #logs{background:#070a11;border:1px solid var(--line);border-radius:12px;padding:14px;
   font-family:'JetBrains Mono';font-size:12px;line-height:1.75;max-height:380px;overflow-y:auto}
 #logs .t{color:#525c78;margin-right:10px}
 #logs .info{color:#c6cde3}#logs .warn{color:var(--amber)}#logs .error{color:var(--red)}
 .empty{color:var(--dim);text-align:center;padding:26px;font-size:13px}
 .foot{color:var(--dim);font-size:11.5px;text-align:center;margin-top:26px;font-family:'JetBrains Mono'}
+/* giriş perdesi */
+#gate{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:20px;
+  background:rgba(7,10,17,.86);backdrop-filter:blur(12px)}
+#gate.hide{display:none}
+.gatebox{width:min(420px,100%);background:var(--panel2);border:1px solid var(--line);
+  border-radius:22px;padding:34px 30px;text-align:center;animation:rise .5s both;
+  box-shadow:0 24px 80px rgba(0,0,0,.6)}
+.gatebox .logo{margin:0 auto 16px;transform:rotate(-4deg)}
+.gatebox h2{font-family:'Unbounded';font-size:19px;margin-bottom:6px}
+.gatebox p{color:var(--dim);font-size:12.5px;margin-bottom:18px}
+.gatebox input{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  color:var(--ink);padding:12px 14px;font-family:'JetBrains Mono';font-size:13px;outline:none;margin-bottom:12px}
+.gatebox input:focus{border-color:var(--blurple)}
+.gatebox .btn{width:100%;padding:12px}
+#gateErr{color:var(--red);font-size:12px;min-height:18px;margin-top:10px;font-family:'JetBrains Mono'}
 @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 @keyframes drop{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
 @keyframes pulse{50%{opacity:.5}}
@@ -109,6 +136,14 @@ tr:last-child td{border-bottom:none}
 </style>
 </head>
 <body>
+<div id="gate"><div class="gatebox">
+  <div class="logo">T</div>
+  <h2>Panele Giriş</h2>
+  <p>Devam etmek için <b>DASHBOARD_TOKEN</b> değerini gir. Token yoksa kimse giremez.</p>
+  <input id="gateToken" type="password" placeholder="token…" autocomplete="off">
+  <button class="btn primary" id="gateBtn">Giriş Yap</button>
+  <div id="gateErr"></div>
+</div></div>
 <div class="wrap">
   <div class="top">
     <div class="logo">T</div>
@@ -118,15 +153,42 @@ tr:last-child td{border-bottom:none}
     </div>
     <div class="sp"></div>
     <span class="pill"><span class="dot" id="dot"></span><span id="conn">bağlanıyor…</span></span>
-    <input class="token" id="token" type="password" placeholder="DASHBOARD_TOKEN (yazma için)" autocomplete="off">
     <button class="btn" id="refresh">↻ Yenile</button>
+    <button class="btn" id="logout">Çıkış</button>
   </div>
 
   <div class="grid" id="cards"></div>
 
   <div class="sec">
+    <h2>⏻ Bot Gücü <span class="tag" id="powerTag">—</span></h2>
+    <p class="d">Botu Discord'dan düşür, geri bağla ya da container'ı yeniden başlat. Bot durmuşken bile panel açık kalır.</p>
+    <div class="row">
+      <span class="pill"><span class="dot" id="powerDot"></span><span id="powerTxt">durum alınıyor…</span></span>
+      <div class="sp" style="flex:1"></div>
+      <button class="btn primary" id="startBtn">▶ Başlat</button>
+      <button class="btn danger" id="stopBtn">⏸ Durdur</button>
+      <button class="btn" id="restartBtn">↻ Yeniden Başlat</button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>🤖 Modeller <span class="tag" id="modelTag">—</span></h2>
+    <p class="d">Kapalı model komut listelerinde görünmez, kimse seçemez. Kayıtlı seçimi kapanan kullanıcı varsayılana düşer.</p>
+    <div class="row">
+      <div style="flex:1;min-width:220px"><span class="flabel">Global sohbet modeli (tüm sunucular)</span><select class="sel" id="globalChat"></select></div>
+      <div style="flex:1;min-width:220px"><span class="flabel">Global görsel modeli</span><select class="sel" id="globalImg"></select></div>
+    </div>
+    <h3 style="font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px">Sunucuya özel model (boş = globali kullanır)</h3>
+    <div id="guildModels"><div class="empty">yükleniyor…</div></div>
+    <h3 style="font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px">Sohbet (/ai, /aimodels)</h3>
+    <div id="chatModels"></div>
+    <h3 style="font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px">Görsel (/ai-gorsel)</h3>
+    <div id="imgModels"></div>
+  </div>
+
+  <div class="sec">
     <h2>⚙️ Ayarlar <span class="tag">ayar</span></h2>
-    <p class="d">Yerel AI anahtarı tüm sunucuları etkiler. Değişiklik için sağ üstteki token gerekir.</p>
+    <p class="d">Yerel AI anahtarı tüm sunucuları etkiler.</p>
     <div class="row">
       <div class="switch" id="localSw" title="Yerel AI"></div>
       <div><b id="localTxt" style="font-size:14px">Yerel AI</b>
@@ -162,21 +224,47 @@ tr:last-child td{border-bottom:none}
 
 <script>
 const $ = id => document.getElementById(id);
-const token = () => $('token').value.trim();
+const LS_KEY = 'tigobot-dash-token';
+const token = () => (localStorage.getItem(LS_KEY) || '').trim();
+function showGate(msg){
+  $('gate').classList.remove('hide');
+  if (msg) $('gateErr').textContent = msg;
+}
+function hideGate(){ $('gate').classList.add('hide'); $('gateErr').textContent=''; }
 async function api(path, opts={}) {
   const h = Object.assign({}, opts.headers||{});
   if (token()) h['x-dashboard-token'] = token();
   const r = await fetch(path, Object.assign({}, opts, { headers:h }));
+  if (r.status === 401) { showGate('Token eksik ya da yanlış.'); throw new Error('HTTP 401'); }
   if (!r.ok) throw new Error('HTTP '+r.status);
   return r.json();
 }
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 let localOn = null;
 
+function setPower(online){
+  $('powerTag').textContent = online ? 'çevrimiçi' : 'çevrimdışı';
+  $('powerTxt').textContent = online ? 'Bot Discord\'a bağlı' : 'Bot durdurulmuş';
+  $('powerDot').style.background = online ? 'var(--lime)' : 'var(--red)';
+  $('powerDot').style.boxShadow = online ? '0 0 12px var(--lime)' : '0 0 12px var(--red)';
+  $('startBtn').disabled = !!online;
+  $('stopBtn').disabled = !online;
+}
+
+async function power(action, soru){
+  if (!confirm(soru)) return;
+  try {
+    const r = await api('/api/power', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action }) });
+    if (action === 'restart') { alert('Yeniden başlatılıyor… ~30 sn sonra sayfayı yenile.'); return; }
+    setPower(r.online);
+  } catch(e){ if (!/401/.test(e.message)) alert('İşlem başarısız.'); }
+}
+
 async function loadStats(){
   const s = await api('/api/stats');
-  $('conn').textContent = 'çevrimiçi • '+s.uptime;
+  $('conn').textContent = 'panel bağlı • '+s.uptime;
   $('dot').style.background = 'var(--lime)';
+  setPower(s.online);
   const pingCls = s.ping < 0 ? '' : s.ping < 200 ? 'ok' : s.ping < 500 ? 'warn' : 'bad';
   $('cards').innerHTML = [
     ['Sunucular', s.guilds, s.users+' kullanıcı'],
@@ -214,18 +302,78 @@ async function loadLogs(){
   ).join('') : '<div class="empty">kayıt yok</div>';
   $('logs').scrollTop = $('logs').scrollHeight;
 }
-async function refreshAll(){ try{ await Promise.all([loadStats(), loadConfig(), loadLogs()]); }catch(e){ $('conn').textContent='bağlantı hatası'; } }
+function modelRow(m, type){
+  return `<div class="mrow${m.enabled?'':' off'}" id="m-${type}-${esc(m.key)}">
+    <div class="grow"><b>${esc(m.name)}</b><code>${esc(m.api)}</code></div>
+    ${m.kind?`<span class="kind">${esc(m.kind)}</span>`:''}
+    <div class="switch${m.enabled?' on':''}" onclick="toggleModel('${type}','${esc(m.key)}',this)"></div>
+  </div>`;
+}
+async function loadModels(){
+  const d = await api('/api/models');
+  const chatOn = d.chat.filter(m=>m.enabled);
+  $('globalChat').innerHTML = chatOn.map(m=>
+    `<option value="${esc(m.key)}"${m.key===d.globalChat?' selected':''}>${esc(m.name)}</option>`).join('');
+  $('globalImg').innerHTML = d.img.filter(m=>m.enabled).map(m=>
+    `<option value="${esc(m.key)}"${m.key===d.globalImg?' selected':''}>${esc(m.name)}</option>`).join('');
+  const chatAd = k => (d.chat.find(m=>m.key===k)||{}).name || k;
+  $('guildModels').innerHTML = d.guilds.length ? d.guilds.map(g=>
+    `<div class="mrow"><div class="grow"><b>${esc(g.name)}</b><code>şu an: ${esc(chatAd(g.effective))}${g.model?' (özel)':''}</code></div>
+    <select class="sel" style="max-width:230px" onchange="setGuildModel('${esc(g.id)}',this.value)">
+    <option value="">Globali kullan</option>` +
+    chatOn.map(m=>`<option value="${esc(m.key)}"${m.key===g.model?' selected':''}>${esc(m.name)}</option>`).join('') +
+    `</select></div>`).join('') : '<div class="empty">sunucu yok</div>';
+  $('chatModels').innerHTML = d.chat.map(m=>modelRow(m,'chat')).join('');
+  $('imgModels').innerHTML = d.img.map(m=>modelRow(m,'img')).join('');
+  const on = chatOn.length + d.img.filter(m=>m.enabled).length;
+  $('modelTag').textContent = on + '/' + (d.chat.length + d.img.length) + ' açık';
+}
+async function postModel(payload, errMsg){
+  try { return await api('/api/models', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); }
+  catch(e){ if (!/401/.test(e.message||'')) alert(errMsg || 'Değişmedi, tekrar dene.'); throw e; }
+}
+$('globalChat').onchange = e => postModel({ type:'globalChat', key: e.target.value }).then(()=>loadModels().catch(()=>{})).catch(()=>{});
+$('globalImg').onchange = e => postModel({ type:'globalImg', key: e.target.value }).then(()=>loadModels().catch(()=>{})).catch(()=>{});
+async function setGuildModel(guildId, key){
+  try { await postModel({ type:'guildChat', guildId, key: key || null }); loadModels().catch(()=>{}); } catch {}
+}
+async function toggleModel(type, key, el){
+  const turnOn = !el.classList.contains('on');
+  el.style.opacity = '.4';
+  try {
+    const r = await api('/api/models', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type, key, enabled: turnOn }) });
+    el.classList.toggle('on', !!r.enabled);
+    el.closest('.mrow').classList.toggle('off', !r.enabled);
+    loadModels().catch(()=>{});
+  } catch(e){ if (!/401/.test(e.message||'')) alert('Değişmedi, tekrar dene.'); }
+  el.style.opacity = '';
+}
+async function refreshAll(){
+  try { await Promise.all([loadStats(), loadConfig(), loadLogs(), loadModels()]); hideGate(); }
+  catch(e){ if (!/401/.test(e.message||'')) $('conn').textContent='bağlantı hatası'; }
+}
 $('refresh').onclick = refreshAll;
-$('logBtn').onclick = loadLogs;
-$('level').onchange = loadLogs;
+$('logBtn').onclick = () => loadLogs().catch(()=>{});
+$('level').onchange = () => loadLogs().catch(()=>{});
+$('logout').onclick = () => { localStorage.removeItem(LS_KEY); showGate(); };
+$('gateBtn').onclick = async () => {
+  const v = $('gateToken').value.trim();
+  if (!v) return;
+  localStorage.setItem(LS_KEY, v);
+  $('gateToken').value = '';
+  await refreshAll();
+};
+$('gateToken').addEventListener('keydown', e => { if (e.key === 'Enter') $('gateBtn').click(); });
+$('startBtn').onclick = () => power('start', 'Bot Discord\'a bağlansın mı?');
+$('stopBtn').onclick = () => power('stop', 'Bot durdurulsun mu? Komutlar çalışmaz, panel açık kalır.');
+$('restartBtn').onclick = () => power('restart', 'Container yeniden başlatılsın mı? (~30 sn kesinti)');
 $('localBtn').onclick = async () => {
-  if (!token()) return alert('Önce DASHBOARD_TOKEN gir.');
   const btn = $('localBtn'); btn.disabled = true;
   try {
     const r = await api('/api/local', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ on: !localOn }) });
     localOn = r.local; $('localSw').classList.toggle('on', !!localOn);
     $('localTxt').textContent = 'Yerel AI: '+(localOn?'AÇIK':'KAPALI');
-  } catch(e){ alert('Değişmedi (token yanlış olabilir).'); }
+  } catch(e){ if (!/401/.test(e.message||'')) alert('Değişmedi, tekrar dene.'); }
   btn.disabled = false;
 };
 refreshAll();

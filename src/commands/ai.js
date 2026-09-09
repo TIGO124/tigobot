@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { t, getLang } = require('../i18n');
-const { getUserModel, defaultNvidia, modelName } = require('../ai-models');
+const { effectiveModel, defaultNvidia } = require('../ai-models');
 const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
 const { guvenilirMi } = require('../trust');
 const { aiAkis, durumEmbed, animMetni } = require('../ai-progress');
@@ -27,10 +27,10 @@ function build(lang) {
       }
       markCooldown(interaction.user.id, interaction.guildId);
     }
-    const model = getUserModel(interaction.user.id);
+    const model = effectiveModel(interaction.guildId);
     const baslangic = animMetni(0, L);
     await interaction.deferReply();
-    const mesaj = await interaction.editReply({ embeds: [durumEmbed(baslangic, modelName(model, L), L)] });
+    const mesaj = await interaction.editReply({ embeds: [durumEmbed(baslangic, L)] });
     await aiAkis({
       mesaj,
       ekGonder: o => interaction.followUp(o),

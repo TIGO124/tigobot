@@ -1,6 +1,6 @@
 const { Events, PermissionFlagsBits } = require('discord.js');
 const config = require('../config');
-const { getUserModel, defaultNvidia, modelName } = require('../ai-models');
+const { effectiveModel, defaultNvidia } = require('../ai-models');
 const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
 const { guvenilirMi } = require('../trust');
 const { t, getLang } = require('../i18n');
@@ -35,11 +35,11 @@ async function handleMention(message) {
     markCooldown(message.author.id, message.guildId);
   }
 
-  const model = getUserModel(message.author.id);
+  const model = effectiveModel(message.guildId);
   const baslangic = animMetni(0, L0);
   let mesaj;
   try {
-    mesaj = await message.reply({ embeds: [durumEmbed(baslangic, modelName(model, L0), L0)] });
+    mesaj = await message.reply({ embeds: [durumEmbed(baslangic, L0)] });
   } catch {
     return true;
   }

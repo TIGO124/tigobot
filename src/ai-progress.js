@@ -3,14 +3,13 @@ const { kuyrugaEkle, siraBilgisi, uretimYap, yerelHazirMi } = require('./ai');
 const { sanitize, kullaniciMesaji } = require('./sanitize');
 const { t, getLang, setLang } = require('./i18n');
 const { detectLang } = require('./langdetect');
-const { modelName } = require('./ai-models');
 const { getHistory, pushHistory, MAX_TUR } = require('./memory');
 
-function durumEmbed(metin, modelAdi, lang) {
+function durumEmbed(metin, lang) {
+  // Model adı bilerek yazılmaz: aktif model sadece owner/panel tarafından bilinir.
   return new EmbedBuilder()
     .setDescription(metin)
     .setColor(0x5865F2)
-    .setFooter({ text: t(lang, 'ai.modelTag', { m: modelAdi }) })
     .setTimestamp();
 }
 
@@ -44,17 +43,17 @@ function cumlelereBol(text, max = 400) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function kademeliGoster(mesaj, ekGonder, modelAdi, lang, tamMetin) {
+async function kademeliGoster(mesaj, ekGonder, lang, tamMetin) {
   const parcalar = cumlelereBol(tamMetin, 400);
   let gosterilen = '';
   let aktif = mesaj;
   for (const p of parcalar) {
     if ((gosterilen + p).length > 3900) {
-      aktif = await ekGonder({ embeds: [durumEmbed(p, modelAdi, lang)] });
+      aktif = await ekGonder({ embeds: [durumEmbed(p, lang)] });
       gosterilen = p;
     } else {
       gosterilen += p;
-      await aktif.edit({ embeds: [durumEmbed(gosterilen, modelAdi, lang)] });
+      await aktif.edit({ embeds: [durumEmbed(gosterilen, lang)] });
     }
     await sleep(900);
   }
@@ -86,7 +85,7 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, guildId, model, yedek,
       if (!h.hazir) aktifModel = yedek;
     } catch {}
   }
-  const { jobId, sonuc } = kuyrugaEkle(userId, userTag, modelName(aktifModel, lang), () => {
+  const { jobId, sonuc } = kuyrugaEkle(userId, userTag, aktifModel.key, () => {
     // Sohbet hafızası: önceki turları bağlam olarak gönder
     const gecmis = getHistory(userId, guildId);
     return uretimYap(aktifModel, yedek, [...gecmis, { role: 'user', content: soru }], lang);
@@ -100,7 +99,7 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, guildId, model, yedek,
       const metin = !b || b.sira <= 1 ? animMetni(animI++, lang) : kuyrukMetni(b.sira, b.toplam, lang);
       if (metin !== sonMetin) {
         sonMetin = metin;
-        await mesaj.edit({ embeds: [durumEmbed(metin, modelName(aktifModel, lang), lang)] });
+        await mesaj.edit({ embeds: [durumEmbed(metin, lang)] });
       }
     } catch {}
   };
@@ -113,7 +112,7 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, guildId, model, yedek,
     clearInterval(timer);
     // Başarılı cevabı hafızaya yaz (sonraki sorularda bağlam olur)
     try { pushHistory(userId, guildId, soru, res.text); } catch {}
-    await kademeliGoster(mesaj, ekGonder, modelName(res.model, lang), lang, (res.note ? res.note + '\n\n' : '') + res.text);
+    await kademeliGoster(mesaj, ekGonder, lang, (res.note ? res.note + '\n\n' : '') + res.text);
   } catch (e) {
     bitti = true;
     clearInterval(timer);

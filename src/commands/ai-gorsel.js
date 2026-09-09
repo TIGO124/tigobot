@@ -41,9 +41,9 @@ function build(lang) {
     }
     await interaction.deferReply();
     const baslangic = animMetni(0, L);
-    const mesaj = await interaction.editReply({ embeds: [durumEmbed(baslangic, 'FLUX', L)] });
+    const mesaj = await interaction.editReply({ embeds: [durumEmbed(baslangic, L)] });
     // Global AI kuyruğundan geçir (metin üretimleriyle çakışmasın)
-    const { jobId, sonuc } = kuyrugaEkle(interaction.user.id, interaction.user.tag, 'FLUX', () =>
+    const { jobId, sonuc } = kuyrugaEkle(interaction.user.id, interaction.user.tag, 'img', () =>
       generateImage(prompt, size));
     let bitti = false;
     let animI = 1;
@@ -52,11 +52,11 @@ function build(lang) {
       try {
         const b = siraBilgisi(jobId);
         const metin = !b || b.sira <= 1 ? animMetni(animI++, L) : '```diff\n' + t(L, 'ai.queue', { s: b.sira, t: b.toplam, o: b.sira - 1 }) + '\n```';
-        await mesaj.edit({ embeds: [durumEmbed(metin, 'FLUX', L)] }).catch(() => {});
+        await mesaj.edit({ embeds: [durumEmbed(metin, L)] }).catch(() => {});
       } catch {}
     }, 3000);
     try {
-      const { buffer, model } = await sonuc;
+      const { buffer } = await sonuc;
       bitti = true;
       clearInterval(timer);
       const dosya = new AttachmentBuilder(buffer, { name: 'tigobot.png' });
@@ -65,7 +65,6 @@ function build(lang) {
         .setDescription(prompt.length > 1000 ? prompt.slice(0, 1000) + '…' : prompt)
         .setColor(0x5865F2)
         .setImage('attachment://tigobot.png')
-        .setFooter({ text: t(L, 'ai.modelTag', { m: model }) })
         .setTimestamp();
       await mesaj.edit({ embeds: [embed], files: [dosya] });
     } catch (e) {
