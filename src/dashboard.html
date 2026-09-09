@@ -317,12 +317,19 @@ async function loadModels(){
   $('globalImg').innerHTML = d.img.filter(m=>m.enabled).map(m=>
     `<option value="${esc(m.key)}"${m.key===d.globalImg?' selected':''}>${esc(m.name)}</option>`).join('');
   const chatAd = k => (d.chat.find(m=>m.key===k)||{}).name || k;
+  const imgAd = k => (d.img.find(m=>m.key===k)||{}).name || k;
+  const imgOn = d.img.filter(m=>m.enabled);
   $('guildModels').innerHTML = d.guilds.length ? d.guilds.map(g=>
-    `<div class="mrow"><div class="grow"><b>${esc(g.name)}</b><code>şu an: ${esc(chatAd(g.effective))}${g.model?' (özel)':''}</code></div>
-    <select class="sel" style="max-width:230px" onchange="setGuildModel('${esc(g.id)}',this.value)">
-    <option value="">Globali kullan</option>` +
+    `<div class="mrow"><div class="grow"><b>${esc(g.name)}</b><code>sohbet: ${esc(chatAd(g.effective))}${g.model?' (özel)':''} • görsel: ${esc(imgAd(g.imgEffective))}${g.imgModel?' (özel)':''}</code></div>
+    <div style="display:flex;flex-direction:column;gap:6px;flex:none">
+    <select class="sel" style="max-width:230px" title="Sohbet modeli" onchange="setGuildModel('${esc(g.id)}',this.value,'guildChat')">
+    <option value="">Sohbet: Global</option>` +
     chatOn.map(m=>`<option value="${esc(m.key)}"${m.key===g.model?' selected':''}>${esc(m.name)}</option>`).join('') +
-    `</select></div>`).join('') : '<div class="empty">sunucu yok</div>';
+    `</select>
+    <select class="sel" style="max-width:230px" title="Görsel modeli" onchange="setGuildModel('${esc(g.id)}',this.value,'guildImg')">
+    <option value="">Görsel: Global</option>` +
+    imgOn.map(m=>`<option value="${esc(m.key)}"${m.key===g.imgModel?' selected':''}>${esc(m.name)}</option>`).join('') +
+    `</select></div></div>`).join('') : '<div class="empty">sunucu yok</div>';
   $('chatModels').innerHTML = d.chat.map(m=>modelRow(m,'chat')).join('');
   $('imgModels').innerHTML = d.img.map(m=>modelRow(m,'img')).join('');
   const on = chatOn.length + d.img.filter(m=>m.enabled).length;
@@ -334,8 +341,8 @@ async function postModel(payload, errMsg){
 }
 $('globalChat').onchange = e => postModel({ type:'globalChat', key: e.target.value }).then(()=>loadModels().catch(()=>{})).catch(()=>{});
 $('globalImg').onchange = e => postModel({ type:'globalImg', key: e.target.value }).then(()=>loadModels().catch(()=>{})).catch(()=>{});
-async function setGuildModel(guildId, key){
-  try { await postModel({ type:'guildChat', guildId, key: key || null }); loadModels().catch(()=>{}); } catch {}
+async function setGuildModel(guildId, key, type){
+  try { await postModel({ type: type || 'guildChat', guildId, key: key || null }); loadModels().catch(()=>{}); } catch {}
 }
 async function toggleModel(type, key, el){
   const turnOn = !el.classList.contains('on');

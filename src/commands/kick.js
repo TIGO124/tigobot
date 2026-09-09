@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { t, getLang } = require('../i18n');
+const { clip } = require('../sanitize');
 
 const NAMES = { tr: 'kick', en: 'kick' };
 
@@ -14,7 +15,7 @@ function build(lang) {
   async function execute(interaction) {
     const L = getLang(interaction.guildId);
     const member = interaction.options.getMember('kullanici');
-    const reason = interaction.options.getString('sebep') || t(L, 'warn.noreason');
+    const reason = clip(interaction.options.getString('sebep') || t(L, 'warn.noreason'), 1500);
     if (!member) return interaction.reply({ content: t(L, 'kick.notin'), ephemeral: true });
     if (!member.kickable) return interaction.reply({ content: t(L, 'kick.noperm'), ephemeral: true });
     try {

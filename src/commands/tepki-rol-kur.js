@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { t, getLang } = require('../i18n');
+const { clip } = require('../sanitize');
 
 const NAMES = { tr: 'tepki-rol-kur', en: 'reaction-role' };
 
@@ -15,8 +16,8 @@ function build(lang) {
   async function execute(interaction) {
     const L = getLang(interaction.guildId);
     const rol = interaction.options.getRole('rol');
-    const baslik = interaction.options.getString('baslik') || t(L, 'rr.def.title');
-    const aciklama = interaction.options.getString('aciklama') || t(L, 'rr.def.text', { r: rol });
+    const baslik = clip(interaction.options.getString('baslik') || t(L, 'rr.def.title'), 250);
+    const aciklama = clip(interaction.options.getString('aciklama') || t(L, 'rr.def.text', { r: rol }), 3500);
     if (rol.managed) return interaction.reply({ content: t(L, 'rr.managed'), ephemeral: true });
     const embed = new EmbedBuilder()
       .setTitle(baslik)

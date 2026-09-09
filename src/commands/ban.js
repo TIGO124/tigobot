@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { t, getLang } = require('../i18n');
+const { clip } = require('../sanitize');
 
 const NAMES = { tr: 'ban', en: 'ban' };
 
@@ -14,7 +15,7 @@ function build(lang) {
   async function execute(interaction) {
     const L = getLang(interaction.guildId);
     const user = interaction.options.getUser('kullanici');
-    const reason = interaction.options.getString('sebep') || t(L, 'warn.noreason');
+    const reason = clip(interaction.options.getString('sebep') || t(L, 'warn.noreason'), 1500);
     const member = interaction.guild.members.cache.get(user.id);
     if (member && !member.bannable) return interaction.reply({ content: t(L, 'ban.noperm'), ephemeral: true });
     try {

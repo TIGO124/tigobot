@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { t, getLang } = require('../i18n');
 const { save, load } = require('../store');
+const { clip } = require('../sanitize');
 
 const NAMES = { tr: 'anket', en: 'poll' };
 
@@ -31,10 +32,11 @@ function build(lang) {
 
   async function execute(interaction) {
     const L = getLang(interaction.guildId);
-    const soru = interaction.options.getString('soru');
+    const soru = clip(interaction.options.getString('soru'), 240);
     const secenekler = [1, 2, 3, 4]
       .map(i => interaction.options.getString(`secenek${i}`))
-      .filter(Boolean);
+      .filter(Boolean)
+      .map(s => clip(s, 75));
     const pollId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     const row = new ActionRowBuilder().addComponents(
       secenekler.map((s, i) =>

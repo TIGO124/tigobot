@@ -74,6 +74,37 @@ function setGlobalImgModel(key) {
   return m;
 }
 
+// Sunucuya özel görsel model (null = globale dön). models.json: { guildImg: {gid:key} }
+function getGuildImgModelKey(guildId) {
+  if (!guildId) return null;
+  const g = load('models.json', {}).guildImg || {};
+  return typeof g[guildId] === 'string' ? g[guildId] : null;
+}
+
+function setGuildImgModel(guildId, key) {
+  if (!guildId) return null;
+  if (key !== null) {
+    const m = IMG_MODELS.find(x => x.key === key);
+    if (!m || !isImgEnabled(m.key)) return null;
+  }
+  const s = load('models.json', {});
+  s.guildImg = s.guildImg && typeof s.guildImg === 'object' ? s.guildImg : {};
+  if (key === null) delete s.guildImg[guildId];
+  else s.guildImg[guildId] = key;
+  save('models.json', s);
+  return key === null ? getGlobalImgModel() : findImgModel(key);
+}
+
+// Efektif görsel model: sunucu özeli (açıksa) -> global -> ilk açık
+function effectiveImgModel(guildId) {
+  const gk = getGuildImgModelKey(guildId);
+  if (gk) {
+    const m = findImgModel(gk);
+    if (m && isImgEnabled(m.key)) return m;
+  }
+  return getGlobalImgModel();
+}
+
 async function callImage(model, prompt, size) {
   const apiKey = process.env.NVIDIA_API_KEY;
   if (!apiKey) throw new Error('NVIDIA_API_KEY ayarlı değil. Railway Variables kısmına ekle.');
@@ -125,10 +156,10 @@ async function callImage(model, prompt, size) {
   throw lastNetErr || new Error('Görsel üretilemedi (bağlantı kurulamadı).');
 }
 
-async function generateImage(prompt, size) {
-  // Global model önce, sonra diğer AÇIK modeller yedek (key hatasında durulur)
+async function generateImage(prompt, size, guildId) {
+  // Sunucu özeli önce, sonra global, sonra diğer AÇIK modeller yedek (key hatasında durulur)
   const havuz = enabledImgModels();
-  const ilk = havuz.find(m => m.key === getGlobalImgModel().key) || havuz[0];
+  const ilk = havuz.find(m => m.key === effectiveImgModel(guildId).key) || havuz[0];
   const sira = [ilk, ...havuz.filter(m => m.key !== ilk.key)];
   let lastErr = null;
   for (const m of sira) {
@@ -155,4 +186,4 @@ function markImgCooldown(userId, guildId) {
   beklemeImg.set(guildId ? `${guildId}:${userId}` : `dm:${userId}`, Date.now());
 }
 
-module.exports = { generateImage, findImgModel, imgModelName, enabledImgModels, isImgEnabled, setImgEnabled, getGlobalImgModel, setGlobalImgModel, imgCooldownLeft, markImgCooldown, MAX_PROMPT, IMG_MODELS };
+module.exports = { generateImage, findImgModel, imgModelName, enabledImgModels, isImgEnabled, setImgEnabled, getGlobalImgModel, setGlobalImgModel, getGuildImgModelKey, setGuildImgModel, effectiveImgModel, imgCooldownLeft, markImgCooldown, MAX_PROMPT, IMG_MODELS };

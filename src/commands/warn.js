@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { t, getLang } = require('../i18n');
+const { clip } = require('../sanitize');
 
 const NAMES = { tr: 'warn', en: 'warn' };
 
@@ -27,7 +28,7 @@ function build(lang) {
   async function execute(interaction) {
     const L = getLang(interaction.guildId);
     const user = interaction.options.getUser('kullanici');
-    const reason = interaction.options.getString('sebep') || t(L, 'warn.noreason');
+    const reason = clip(interaction.options.getString('sebep') || t(L, 'warn.noreason'), 900);
     const embed = new EmbedBuilder()
       .setTitle(t(L, 'warn.title'))
       .setColor(0xFEE75C)

@@ -44,7 +44,7 @@ function build(lang) {
     const mesaj = await interaction.editReply({ embeds: [durumEmbed(baslangic, L)] });
     // Global AI kuyruğundan geçir (metin üretimleriyle çakışmasın)
     const { jobId, sonuc } = kuyrugaEkle(interaction.user.id, interaction.user.tag, 'img', () =>
-      generateImage(prompt, size));
+      generateImage(prompt, size, interaction.guildId));
     let bitti = false;
     let animI = 1;
     const timer = setInterval(async () => {

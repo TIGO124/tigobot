@@ -31,4 +31,10 @@ function kullaniciMesaji(e, lang) {
   return t(L, 'err.generic');
 }
 
-module.exports = { sanitize, kullaniciMesaji };
+// Kullanıcı girdisini Discord limitlerine sığdır (uzunsa … ile keser).
+function clip(s, max = 1000) {
+  s = String(s ?? '');
+  return s.length > max ? s.slice(0, max) + '…' : s;
+}
+
+module.exports = { sanitize, kullaniciMesaji, clip };

@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { t, getLang } = require('../i18n');
+const { clip } = require('../sanitize');
 
 const NAMES = { tr: 'timeout', en: 'timeout' };
 
@@ -16,7 +17,7 @@ function build(lang) {
     const L = getLang(interaction.guildId);
     const member = interaction.options.getMember('kullanici');
     const minutes = interaction.options.getInteger('sure');
-    const reason = interaction.options.getString('sebep') || t(L, 'warn.noreason');
+    const reason = clip(interaction.options.getString('sebep') || t(L, 'warn.noreason'), 1500);
     if (!member) return interaction.reply({ content: t(L, 'timeout.notfound'), ephemeral: true });
     if (!member.moderatable) return interaction.reply({ content: t(L, 'timeout.noperm'), ephemeral: true });
     try {

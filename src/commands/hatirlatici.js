@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { t, getLang } = require('../i18n');
+const { clip } = require('../sanitize');
 
 const NAMES = { tr: 'hatirlatici', en: 'reminder' };
 
@@ -13,7 +14,7 @@ function build(lang) {
   async function execute(interaction) {
     const L = getLang(interaction.guildId);
     const dakika = interaction.options.getInteger('sure');
-    const mesaj = interaction.options.getString('mesaj');
+    const mesaj = clip(interaction.options.getString('mesaj'), 1500);
     await interaction.reply(t(L, 'rem.ok', { u: interaction.user, dk: dakika, m: mesaj }));
     setTimeout(() => {
       interaction.channel.send(t(L, 'rem.fire', { u: interaction.user, m: mesaj })).catch(() => {});

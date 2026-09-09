@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { t, getLang, ballAnswers } = require('../i18n');
+const { clip } = require('../sanitize');
 
 const NAMES = { tr: '8ball', en: '8ball' };
 
@@ -11,7 +12,7 @@ function build(lang) {
 
   async function execute(interaction) {
     const L = getLang(interaction.guildId);
-    const soru = interaction.options.getString('soru');
+    const soru = clip(interaction.options.getString('soru'), 1500);
     const cevaplar = ballAnswers(L);
     const cevap = cevaplar[Math.floor(Math.random() * cevaplar.length)];
     await interaction.reply(t(L, 'ball.msg', { s: soru, c: cevap }));

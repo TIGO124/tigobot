@@ -13,7 +13,7 @@ const { getLang } = require('./i18n');
 const { queueDepth } = require('./ai');
 const { acikMi, ayarla } = require('./local');
 const { allModels, isChatEnabled, setChatEnabled, getGlobalModel, setGlobalModel, getGuildModelKey, setGuildModel, effectiveModel } = require('./ai-models');
-const { IMG_MODELS, isImgEnabled, setImgEnabled, getGlobalImgModel, setGlobalImgModel } = require('./ai-image');
+const { IMG_MODELS, isImgEnabled, setImgEnabled, getGlobalImgModel, setGlobalImgModel, getGuildImgModelKey, setGuildImgModel, effectiveImgModel } = require('./ai-image');
 
 function guildList(client) {
   const out = [];
@@ -107,6 +107,7 @@ function start(client) {
           })),
           guilds: guildList(client).map(g => ({
             ...g, model: getGuildModelKey(g.id), effective: effectiveModel(g.id).key,
+            imgModel: getGuildImgModelKey(g.id), imgEffective: effectiveImgModel(g.id).key,
           })),
         });
       }
@@ -134,6 +135,12 @@ function start(client) {
             if (type === 'guildChat') {
               if (!guildId) return json(res, 400, { error: 'guildId gerekli' });
               const m = setGuildModel(guildId, key === null ? null : key);
+              if (key !== null && !m) return json(res, 400, { error: 'bilinmeyen model' });
+              return json(res, 200, { guildId, key: key === null ? null : m.key });
+            }
+            if (type === 'guildImg') {
+              if (!guildId) return json(res, 400, { error: 'guildId gerekli' });
+              const m = setGuildImgModel(guildId, key === null ? null : key);
               if (key !== null && !m) return json(res, 400, { error: 'bilinmeyen model' });
               return json(res, 200, { guildId, key: key === null ? null : m.key });
             }
