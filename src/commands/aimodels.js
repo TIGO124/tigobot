@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { t, getLang } = require('../i18n');
-const { allModels, getUserModel, setUserModel, modelName, kindLabel } = require('../ai-models');
+const { allModels, getUserModel, setUserModel, modelName } = require('../ai-models');
 
 const NAMES = { tr: 'aimodels', en: 'aimodels' };
 
@@ -21,7 +21,7 @@ function build(lang) {
     if (!key) {
       const cur = getUserModel(interaction.user.id);
       const satirlar = allModels().map(m =>
-        t(L, m.key === cur.key ? 'aim.row' : 'aim.row.off', { n: modelName(m, L), y: kindLabel(m, L) })
+        t(L, m.key === cur.key ? 'aim.row' : 'aim.row.off', { n: modelName(m, L) })
       );
       const embed = new EmbedBuilder()
         .setTitle(t(L, 'aim.title'))

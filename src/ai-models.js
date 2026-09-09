@@ -19,11 +19,6 @@ function modelName(m, lang) {
   return (m.name && (m.name[lang] || m.name.tr)) || m.key;
 }
 
-function kindLabel(m, lang) {
-  if (lang === 'en') return m.kind === 'local' ? 'your computer' : 'NVIDIA cloud';
-  return m.kind === 'local' ? 'senin bilgisayarın' : 'NVIDIA bulutu';
-}
-
 function findModel(key) {
   return allModels().find(m => m.key === key) || null;
 }
@@ -52,4 +47,4 @@ function defaultNvidia() {
   return allModels().find(m => m.kind === 'nvidia') || allModels()[0];
 }
 
-module.exports = { allModels, findModel, getUserModel, setUserModel, defaultModel, defaultNvidia, modelName, kindLabel };
+module.exports = { allModels, findModel, getUserModel, setUserModel, defaultModel, defaultNvidia, modelName };
