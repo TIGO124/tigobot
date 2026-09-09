@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { t, getLang } = require('../i18n');
 const { getUserModel, modelName } = require('../ai-models');
 const { yerelHazirMi } = require('../ai');
+const { getStats } = require('../stats');
 
 const NAMES = { tr: 'durum', en: 'status' };
 
@@ -21,13 +22,18 @@ function build(lang) {
     const model = getUserModel(interaction.user.id);
     const yerel = await yerelKontrol();
     const nvidiaKey = Boolean(process.env.NVIDIA_API_KEY);
+    const st = getStats(interaction.client);
     const embed = new EmbedBuilder()
       .setTitle(t(L, 'status.title'))
       .setColor(0x5865F2)
       .addFields(
-        { name: t(L, 'status.f.model'), value: modelName(model, L) },
-        { name: t(L, 'status.f.local'), value: yerel.bagli ? t(L, 'status.local.on', { n: yerel.sayi }) : t(L, 'status.local.off') },
-        { name: t(L, 'status.f.nvidia'), value: nvidiaKey ? t(L, 'status.nvidia.on') : t(L, 'status.nvidia.off') },
+        { name: t(L, 'status.f.model'), value: modelName(model, L), inline: true },
+        { name: t(L, 'status.f.local'), value: yerel.bagli ? t(L, 'status.local.on', { n: yerel.sayi }) : t(L, 'status.local.off'), inline: true },
+        { name: t(L, 'status.f.nvidia'), value: nvidiaKey ? t(L, 'status.nvidia.on') : t(L, 'status.nvidia.off'), inline: true },
+        { name: t(L, 'status.f.uptime'), value: st.uptime, inline: true },
+        { name: t(L, 'status.f.mem'), value: `${st.memHeap} / ${st.memRss}`, inline: true },
+        { name: t(L, 'status.f.servers'), value: t(L, 'status.servers', { g: st.guilds, u: st.users }), inline: true },
+        { name: t(L, 'status.f.net'), value: t(L, 'status.net', { ping: st.ping >= 0 ? st.ping : '—', node: st.node, cmd: st.commands }), inline: false },
       )
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });

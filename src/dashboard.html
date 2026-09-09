@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TigoBot — Kontrol Paneli</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0e14; --panel:#121724; --panel2:#171e30; --line:#232c45;
+  --ink:#e8ecf6; --dim:#8b94ad; --blurple:#5865f2; --lime:#b6f09c;
+  --amber:#ffcf5c; --red:#ff7a90; --cyan:#7dd7ff;
+  --r:18px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:'Sora',system-ui,sans-serif; min-height:100vh;
+  background-image:
+    radial-gradient(1100px 500px at 85% -10%, rgba(88,101,242,.22), transparent 60%),
+    radial-gradient(900px 480px at -10% 20%, rgba(125,215,255,.08), transparent 60%),
+    linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+  background-size:auto,auto,44px 44px,44px 44px;
+}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .04 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 22px 60px;position:relative;z-index:1}
+/* header */
+.top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:26px;
+  animation:drop .6s cubic-bezier(.2,.9,.25,1) both}
+.logo{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;
+  font-family:'Unbounded';font-weight:900;font-size:22px;color:#fff;
+  background:linear-gradient(135deg,#5865f2,#2b3595 70%,#141a3d);
+  box-shadow:0 8px 32px rgba(88,101,242,.45), inset 0 1px 0 rgba(255,255,255,.35);
+  transform:rotate(-4deg)}
+h1{font-family:'Unbounded';font-weight:700;font-size:clamp(22px,3.4vw,32px);letter-spacing:-.5px}
+h1 em{font-style:normal;color:var(--cyan)}
+.sub{color:var(--dim);font-size:13px;margin-top:4px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--lime);
+  box-shadow:0 0 12px var(--lime);animation:pulse 2s infinite}
+.pill{display:inline-flex;align-items:center;gap:8px;background:var(--panel);
+  border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:12.5px}
+.top .sp{flex:1}
+.token{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  color:var(--ink);padding:10px 12px;font-family:'JetBrains Mono';font-size:12px;width:210px;outline:none}
+.token:focus{border-color:var(--blurple)}
+.btn{cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--ink);
+  border-radius:12px;padding:10px 16px;font-family:'Sora';font-weight:600;font-size:13px;transition:.18s}
+.btn:hover{border-color:var(--blurple);transform:translateY(-1px)}
+.btn.primary{background:var(--blurple);border-color:var(--blurple);color:#fff;
+  box-shadow:0 6px 24px rgba(88,101,242,.4)}
+.btn.danger{border-color:#5a2b38;color:var(--red)}
+.btn:disabled{opacity:.5;cursor:wait;transform:none}
+/* cards */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:22px}
+.card{background:linear-gradient(180deg,var(--panel2),var(--panel));
+  border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;position:relative;overflow:hidden;
+  animation:rise .55s cubic-bezier(.2,.9,.25,1) both}
+.card:nth-child(2){animation-delay:.06s}.card:nth-child(3){animation-delay:.12s}
+.card:nth-child(4){animation-delay:.18s}.card:nth-child(5){animation-delay:.24s}
+.card:nth-child(6){animation-delay:.3s}.card:nth-child(7){animation-delay:.36s}
+.card::before{content:"";position:absolute;top:0;left:18px;right:18px;height:2px;
+  background:linear-gradient(90deg,transparent,var(--blurple),transparent);opacity:.7}
+.card .k{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);margin-bottom:8px}
+.card .v{font-family:'Unbounded';font-weight:700;font-size:clamp(20px,2.6vw,28px)}
+.card .s{font-size:12px;color:var(--dim);margin-top:4px;font-family:'JetBrains Mono'}
+.ok{color:var(--lime)} .warn{color:var(--amber)} .bad{color:var(--red)} .cy{color:var(--cyan)}
+/* sections */
+.sec{background:rgba(18,23,36,.85);border:1px solid var(--line);border-radius:var(--r);
+  padding:20px;margin-bottom:18px;backdrop-filter:blur(6px);animation:rise .6s .15s both}
+.sec h2{font-family:'Unbounded';font-size:15px;margin-bottom:4px;display:flex;align-items:center;gap:10px}
+.sec h2 .tag{font-family:'JetBrains Mono';font-size:10px;color:var(--cyan);border:1px solid var(--line);
+  border-radius:6px;padding:2px 8px}
+.sec p.d{color:var(--dim);font-size:12.5px;margin-bottom:14px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;
+  padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:9px 10px;border-bottom:1px solid rgba(35,44,69,.5);font-family:'JetBrains Mono';font-size:12.5px}
+tr:last-child td{border-bottom:none}
+.langbadge{font-size:10px;border:1px solid var(--line);border-radius:6px;padding:2px 8px;color:var(--lime)}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.switch{position:relative;width:52px;height:28px;background:#2a3350;border-radius:999px;cursor:pointer;
+  border:1px solid var(--line);transition:.2s;flex:none}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;
+  background:#8b94ad;transition:.2s}
+.switch.on{background:rgba(182,240,156,.2);border-color:var(--lime)}
+.switch.on::after{left:27px;background:var(--lime);box-shadow:0 0 10px var(--lime)}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.kv div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.kv b{display:block;font-size:22px;font-family:'Unbounded'}
+.kv span{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
+/* logs */
+.logbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.logbar select{background:var(--panel);color:var(--ink);border:1px solid var(--line);
+  border-radius:10px;padding:8px 12px;font-size:12px;font-family:'JetBrains Mono'}
+#logs{background:#070a11;border:1px solid var(--line);border-radius:12px;padding:14px;
+  font-family:'JetBrains Mono';font-size:12px;line-height:1.75;max-height:380px;overflow-y:auto}
+#logs .t{color:#525c78;margin-right:10px}
+#logs .info{color:#c6cde3}#logs .warn{color:var(--amber)}#logs .error{color:var(--red)}
+.empty{color:var(--dim);text-align:center;padding:26px;font-size:13px}
+.foot{color:var(--dim);font-size:11.5px;text-align:center;margin-top:26px;font-family:'JetBrains Mono'}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes drop{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
+@keyframes pulse{50%{opacity:.5}}
+@media(max-width:640px){.wrap{padding:18px 12px 44px}.token{width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="logo">T</div>
+    <div>
+      <h1>TigoBot <em>/ Kontrol</em></h1>
+      <div class="sub">Canlı bot paneli — istatistik, ayar, sunucu ve log</div>
+    </div>
+    <div class="sp"></div>
+    <span class="pill"><span class="dot" id="dot"></span><span id="conn">bağlanıyor…</span></span>
+    <input class="token" id="token" type="password" placeholder="DASHBOARD_TOKEN (yazma için)" autocomplete="off">
+    <button class="btn" id="refresh">↻ Yenile</button>
+  </div>
+
+  <div class="grid" id="cards"></div>
+
+  <div class="sec">
+    <h2>⚙️ Ayarlar <span class="tag">ayar</span></h2>
+    <p class="d">Yerel AI anahtarı tüm sunucuları etkiler. Değişiklik için sağ üstteki token gerekir.</p>
+    <div class="row">
+      <div class="switch" id="localSw" title="Yerel AI"></div>
+      <div><b id="localTxt" style="font-size:14px">Yerel AI</b>
+      <div class="sub" id="localSub">durum yükleniyor…</div></div>
+      <div class="sp" style="flex:1"></div>
+      <button class="btn primary" id="localBtn">Değiştir</button>
+    </div>
+    <div class="kv" id="counts" style="margin-top:16px"></div>
+  </div>
+
+  <div class="sec">
+    <h2>🖥️ Sunucular <span class="tag" id="guildTag">0</span></h2>
+    <p class="d">Botun bağlı olduğu sunucular ve dilleri.</p>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Sunucu</th><th>ID</th><th>Üye</th><th>Dil</th></tr></thead>
+      <tbody id="guilds"><tr><td colspan="4" class="empty">yükleniyor…</td></tr></tbody>
+    </table></div>
+  </div>
+
+  <div class="sec">
+    <h2>📜 Loglar <span class="tag">canlı</span></h2>
+    <p class="d">Son 300 satırlık halka tampon. 5 saniyede bir tazelenir.</p>
+    <div class="logbar">
+      <select id="level"><option value="">tümü</option><option value="info">info</option><option value="warn">warn</option><option value="error">error</option></select>
+      <button class="btn" id="logBtn">↻ Logları getir</button>
+      <label class="pill" style="cursor:pointer"><input type="checkbox" id="auto" checked style="accent-color:#5865f2"> oto-tazele</label>
+    </div>
+    <div id="logs"><div class="empty">log bekleniyor…</div></div>
+  </div>
+
+  <div class="foot">TigoBot panel • <span id="footStats"></span></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const token = () => $('token').value.trim();
+async function api(path, opts={}) {
+  const h = Object.assign({}, opts.headers||{});
+  if (token()) h['x-dashboard-token'] = token();
+  const r = await fetch(path, Object.assign({}, opts, { headers:h }));
+  if (!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+let localOn = null;
+
+async function loadStats(){
+  const s = await api('/api/stats');
+  $('conn').textContent = 'çevrimiçi • '+s.uptime;
+  $('dot').style.background = 'var(--lime)';
+  const pingCls = s.ping < 0 ? '' : s.ping < 200 ? 'ok' : s.ping < 500 ? 'warn' : 'bad';
+  $('cards').innerHTML = [
+    ['Sunucular', s.guilds, s.users+' kullanıcı'],
+    ['Komutlar', s.commands, 'slash (tr+en)'],
+    ['Ping', s.ping<0?'—':s.ping+'<span style="font-size:14px"> ms</span>', 'websocket'],
+    ['Çalışma', esc(s.uptime), 'başlangıç: '+new Date(s.startedAt).toLocaleString('tr')],
+    ['Bellek', esc(s.memHeap), 'rss '+esc(s.memRss)],
+    ['AI kuyruğu', s.queue, 'bekleyen iş'],
+    ['Çalışma', esc(s.node), 'node sürümü'],
+  ].map(([k,v,a],i)=>`<div class="card" style="animation-delay:${i*0.06}s"><div class="k">${k}</div><div class="v ${k==='Ping'?pingCls:''}">${v}</div><div class="s">${esc(a)}</div></div>`).join('');
+  $('footStats').textContent = s.guilds+' sunucu • '+s.users+' kullanıcı • '+s.uptime;
+  return s;
+}
+async function loadConfig(){
+  const c = await api('/api/config');
+  localOn = c.local;
+  $('localSw').classList.toggle('on', !!c.local);
+  $('localTxt').textContent = 'Yerel AI: '+(c.local?'AÇIK':'KAPALI');
+  $('localSub').textContent = c.nvidiaKey ? 'NVIDIA anahtarı tanımlı ✓' : 'NVIDIA anahtarı eksik ✗';
+  $('counts').innerHTML = [
+    [c.langCount,'dilli sunucu'],[c.trustCount,'trust kaydı'],
+    [c.counterCount,'sayaç kanalı'],[c.historyCount,'hafızalı sohbet'],
+    [c.modelCount,'AI modeli'],[c.pollCount,'aktif anket'],
+  ].map(([v,k])=>`<div><b>${v}</b><span>${k}</span></div>`).join('');
+  $('guilds').innerHTML = c.guilds.length ? c.guilds.map(g=>
+    `<tr><td>${esc(g.name)}</td><td>${esc(g.id)}</td><td>${g.members}</td><td><span class="langbadge">${esc(g.lang)}</span></td></tr>`
+  ).join('') : '<tr><td colspan="4" class="empty">sunucu yok</td></tr>';
+  $('guildTag').textContent = c.guilds.length;
+}
+async function loadLogs(){
+  const lv = $('level').value;
+  const logs = await api('/api/logs?limit=120'+(lv?'&level='+lv:''));
+  $('logs').innerHTML = logs.length ? logs.map(l=>
+    `<div><span class="t">${esc(l.t.slice(11,19))}</span><span class="${esc(l.level)}">${esc(l.msg)}</span></div>`
+  ).join('') : '<div class="empty">kayıt yok</div>';
+  $('logs').scrollTop = $('logs').scrollHeight;
+}
+async function refreshAll(){ try{ await Promise.all([loadStats(), loadConfig(), loadLogs()]); }catch(e){ $('conn').textContent='bağlantı hatası'; } }
+$('refresh').onclick = refreshAll;
+$('logBtn').onclick = loadLogs;
+$('level').onchange = loadLogs;
+$('localBtn').onclick = async () => {
+  if (!token()) return alert('Önce DASHBOARD_TOKEN gir.');
+  const btn = $('localBtn'); btn.disabled = true;
+  try {
+    const r = await api('/api/local', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ on: !localOn }) });
+    localOn = r.local; $('localSw').classList.toggle('on', !!localOn);
+    $('localTxt').textContent = 'Yerel AI: '+(localOn?'AÇIK':'KAPALI');
+  } catch(e){ alert('Değişmedi (token yanlış olabilir).'); }
+  btn.disabled = false;
+};
+refreshAll();
+setInterval(()=>{ if($('auto').checked) loadLogs().catch(()=>{}); }, 5000);
+setInterval(()=>{ loadStats().catch(()=>{}); }, 15000);
+</script>
+</body>
+</html>

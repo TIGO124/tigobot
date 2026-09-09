@@ -11,7 +11,7 @@ function build(lang) {
   async function execute(interaction) {
     const L = getLang(interaction.guildId);
     const fields = [];
-    for (let i = 1; i <= 14; i++) {
+    for (let i = 1; i <= 15; i++) {
       fields.push({ name: t(L, `help.f${i}n`), value: t(L, `help.f${i}v`), inline: true });
     }
     const embed = new EmbedBuilder()

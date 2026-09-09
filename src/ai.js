@@ -99,6 +99,10 @@ function siraBilgisi(jobId) {
   return { sira: idx + 2, toplam: bekleyenler.length + 1 };
 }
 
+function queueDepth() {
+  return bekleyenler.length + (aktifIs ? 1 : 0);
+}
+
 async function uretimYap(model, yedekModel, messages, lang) {
   try {
     const text = await chat(model, messages, lang);
@@ -159,4 +163,4 @@ async function yerelHazirMi() {
   }
 }
 
-module.exports = { chat, uretimYap, kuyrugaEkle, siraBilgisi, splitText, cooldownLeft, markCooldown, MAX_SORU, yerelHazirMi };
+module.exports = { chat, uretimYap, kuyrugaEkle, siraBilgisi, queueDepth, splitText, cooldownLeft, markCooldown, MAX_SORU, yerelHazirMi };

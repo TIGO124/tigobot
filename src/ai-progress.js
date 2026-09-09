@@ -4,6 +4,7 @@ const { sanitize, kullaniciMesaji } = require('./sanitize');
 const { t, getLang, setLang } = require('./i18n');
 const { detectLang } = require('./langdetect');
 const { modelName } = require('./ai-models');
+const { getHistory, pushHistory, MAX_TUR } = require('./memory');
 
 function durumEmbed(metin, modelAdi, lang) {
   return new EmbedBuilder()
@@ -85,9 +86,11 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, guildId, model, yedek,
       if (!h.hazir) aktifModel = yedek;
     } catch {}
   }
-  const { jobId, sonuc } = kuyrugaEkle(userId, userTag, modelName(aktifModel, lang), () =>
-    uretimYap(aktifModel, yedek, [{ role: 'user', content: soru }], lang)
-  );
+  const { jobId, sonuc } = kuyrugaEkle(userId, userTag, modelName(aktifModel, lang), () => {
+    // Sohbet hafızası: önceki turları bağlam olarak gönder
+    const gecmis = getHistory(userId, guildId);
+    return uretimYap(aktifModel, yedek, [...gecmis, { role: 'user', content: soru }], lang);
+  });
   let animI = 1;
   let sonMetin = baslangic || null;
   let bitti = false;
@@ -108,6 +111,8 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, guildId, model, yedek,
     const res = await sonuc;
     bitti = true;
     clearInterval(timer);
+    // Başarılı cevabı hafızaya yaz (sonraki sorularda bağlam olur)
+    try { pushHistory(userId, guildId, soru, res.text); } catch {}
     await kademeliGoster(mesaj, ekGonder, modelName(res.model, lang), lang, (res.note ? res.note + '\n\n' : '') + res.text);
   } catch (e) {
     bitti = true;

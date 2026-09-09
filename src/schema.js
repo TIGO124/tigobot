@@ -3,7 +3,7 @@ const path = require('path');
 const { REST, Routes } = require('discord.js');
 
 // Şema değişince artır: bot açılışta sürümü eski sunucuların komutlarını yeniler.
-const CODE_VERSION = 1;
+const CODE_VERSION = 2;
 
 function buildGuildCommands(lang) {
   const out = [];

@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('./logger').install();
 const fs = require('fs');
 const path = require('path');
 const { Client, Collection, GatewayIntentBits, Events } = require('discord.js');
@@ -61,6 +62,12 @@ console.log(`${client.commands.size} komut adı, ${eventSayi} event yüklendi.`)
 
 client.once(Events.ClientReady, async c => {
   console.log(`Giriş yapıldı: ${c.user.tag}`);
+  // Web panel (DASHBOARD_PORT tanımlıysa açılır)
+  try {
+    require('./dashboard').start(c);
+  } catch (e) {
+    console.error('Panel açılamadı:', e.message);
+  }
   // Sayaç kanalını 10 dakikada bir tazele
   setInterval(() => {
     c.guilds.cache.forEach(g => updateCounter(g).catch(() => {}));
