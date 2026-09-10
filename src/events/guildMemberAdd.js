@@ -1,10 +1,19 @@
 const { Events, EmbedBuilder } = require('discord.js');
 const { t, getLang } = require('../i18n');
 const { updateCounter } = require('../counter');
+const { sahipMi } = require('../owner');
 
 module.exports = {
   name: Events.GuildMemberAdd,
   async execute(member) {
+    // ÖZEL BOT KİLİDİ: karşılama mesajı + DM + oto-rol SADECE sahibe uygulanır.
+    // Başkaları için bot hiçbir şey yapmaz (sayaç gibi tarafsız sunucu istatistiği hariç).
+    let sahibeMi = false;
+    try { sahibeMi = sahipMi(member.user); } catch { sahibeMi = false; }
+    if (!sahibeMi) {
+      try { await updateCounter(member.guild); } catch {}
+      return;
+    }
     const welcomeId = process.env.WELCOME_CHANNEL_ID;
     let channel = welcomeId ? member.guild.channels.cache.get(welcomeId) : null;
 
