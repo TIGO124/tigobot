@@ -8,7 +8,7 @@ const { aiAkis, durumEmbed, animMetni } = require('../ai-progress');
 const { isBlocked, blockRemainingMs } = require('../quota');
 const { bul: otocevapBul } = require('../otocevap');
 const { clip } = require('../sanitize');
-const { sahipMi } = require('../owner');
+const { kullanabilirMi } = require('../owner');
 
 // İsmi geçen veya etiketlenen mesajlarda bota soru sorulmuş sayılır.
 // Örnek: "nasılsın tigobot" -> soru "nasılsın" olur.
@@ -73,11 +73,11 @@ module.exports = {
   async execute(message) {
     if (message.author.bot) return;
 
-    // ÖZEL BOT KİLİDİ: bot SADECE sahibine (caglar_007 / OWNER_ID) etki eder.
-    // Sahibi dışındakilerin mesajları tamamen yoksayılır:
+    // ÖZEL BOT KİLİDİ: bot SADECE sahibine (caglar_007 / OWNER_ID) + beta-testerlara etki eder.
+    // Diğerlerinin mesajları tamamen yoksayılır:
     // AI cevabı yok, otocevap yok, küfür/link filtresi yok, silme yok.
     let sahibeMi = false;
-    try { sahibeMi = sahipMi(message.author); } catch { sahibeMi = false; }
+    try { sahibeMi = kullanabilirMi(message.author); } catch { sahibeMi = false; }
     if (!sahibeMi) return;
 
     // Sahibin tanımladığı sabit cevaplar AI'dan önce gelir

@@ -1,7 +1,9 @@
-// Tek sahipli kilit: botu SADECE caglar_007 kullanabilir.
+// Kilit: botu SADECE sahip (caglar_007 / OWNER_ID) + beta-tester listesindekiler kullanabilir.
 // ID tabanlı kontrol en güvenlisi (kullanıcı adı değişebilir / taklit riski düşük ama var).
 // .env içine OWNER_ID yazılırsa ID kontrolü çalışır, yazılmasa bile
 // kullanıcı adı "caglar_007" olan hesaba izin verilir.
+
+const { testMi } = require('./betatester');
 
 const SAHIP_KULLANICI_ADI = 'caglar_007';
 
@@ -41,4 +43,15 @@ function retMesaji(lang) {
     : 'Bu bot özeldir, sadece sahibi (caglar_007) kullanabilir.';
 }
 
-module.exports = { SAHIP_KULLANICI_ADI, sahipMi, retMesaji };
+// Botu kullanabilir mi? Sahip her zaman, beta-tester listesindeki ID'ler de evet.
+function kullanabilirMi(user) {
+  if (!user) return false;
+  if (sahipMi(user)) return true;
+  try {
+    return testMi(user.id);
+  } catch {
+    return false;
+  }
+}
+
+module.exports = { SAHIP_KULLANICI_ADI, sahipMi, kullanabilirMi, retMesaji };

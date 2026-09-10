@@ -10,7 +10,7 @@ const { sanitize } = require('./sanitize');
 const { t, getLang } = require('./i18n');
 const { load, save } = require('./store');
 const { CODE_VERSION, buildGuildCommands, registerGuildCommands } = require('./schema');
-const { sahipMi, retMesaji } = require('./owner');
+const { kullanabilirMi, retMesaji } = require('./owner');
 
 const client = new Client({
   intents: [
@@ -97,11 +97,11 @@ client.once(Events.ClientReady, async c => {
 });
 
 client.on(Events.InteractionCreate, async interaction => {
-  // ÖZEL BOT KİLİDİ: sadece caglar_007 (veya OWNER_ID) kullanabilir.
+  // ÖZEL BOT KİLİDİ: sadece sahip (caglar_007 / OWNER_ID) + beta-testerlar kullanabilir.
   // Buton + slash komut dahil tüm etkileşimler burada kesilir.
   if (interaction.isButton() || interaction.isChatInputCommand()) {
     try {
-      if (!sahipMi(interaction.user)) {
+      if (!kullanabilirMi(interaction.user)) {
         const L = getLang(interaction.guildId);
         const msg = retMesaji(L);
         if (interaction.replied || interaction.deferred) {
