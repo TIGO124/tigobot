@@ -81,7 +81,34 @@ async function runDiag() {
     checkHost('integrate.api.nvidia.com', { authPath: '/v1/models' }),
     checkHost('ai.api.nvidia.com'),
   ]);
-  return { zaman: new Date().toISOString(), integrate, genai };
+  // Yerel tünel (sahibin PC'sindeki Ollama): AI_BASE_URL yoksa kurulmamış demektir.
+  let yerel;
+  const base = (process.env.AI_BASE_URL || '').replace(/\/+$/, '');
+  if (!base) {
+    yerel = { ayarlı: false, hata: 'AI_BASE_URL-yok' };
+  } else {
+    let host = null;
+    try { host = new URL(base).hostname; } catch { host = null; }
+    if (!host) {
+      yerel = { ayarlı: false, hata: 'AI_BASE_URL-hatalı' };
+    } else {
+      const h = await checkHost(host);
+      // Ollama /api/tags'e bak: model listesi dönerse tünel + servis sağlam.
+      let tags = null;
+      if (h.https && h.https.ok) {
+        tags = await sureli(
+          (async () => {
+            const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(ADIM_MS) });
+            const j = await res.json().catch(() => ({}));
+            return { status: res.status, modelSayisi: Array.isArray(j.models) ? j.models.length : null };
+          })(),
+          ADIM_MS + 2000, 'tags'
+        );
+      }
+      yerel = { ayarlı: true, adres: host, ...h, tags };
+    }
+  }
+  return { zaman: new Date().toISOString(), integrate, genai, yerel };
 }
 
 // Discord/panel için tek satırlık özet

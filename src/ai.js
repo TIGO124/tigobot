@@ -156,17 +156,18 @@ function splitText(text, max = 2000) {
 
 // Yerel servise hızlı bakış (akış başında hangi modelin cevaplayacağını bilmek için).
 // Kapalı/adres yoksa anında döner; ağ takılırsa en fazla ~5 sn sürer.
+// neden: null (hazır) | 'kapali' (/local kapatılmış) | 'adres-yok' (AI_BASE_URL eksik) | 'erisilemiyor' (tünel/PC kapalı)
 async function yerelHazirMi() {
-  if (!acikMi()) return { hazir: false, sayi: 0 };
+  if (!acikMi()) return { hazir: false, sayi: 0, neden: 'kapali' };
   const base = (process.env.AI_BASE_URL || '').replace(/\/+$/, '');
-  if (!base) return { hazir: false, sayi: 0 };
+  if (!base) return { hazir: false, sayi: 0, neden: 'adres-yok' };
   try {
     const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) return { hazir: false, sayi: 0 };
+    if (!res.ok) return { hazir: false, sayi: 0, neden: 'erisilemiyor' };
     const data = await res.json();
-    return { hazir: true, sayi: (data.models || []).length };
+    return { hazir: true, sayi: (data.models || []).length, neden: null };
   } catch {
-    return { hazir: false, sayi: 0 };
+    return { hazir: false, sayi: 0, neden: 'erisilemiyor' };
   }
 }
 
