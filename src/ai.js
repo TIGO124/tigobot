@@ -11,13 +11,13 @@ const NVIDIA_BASE = 'https://integrate.api.nvidia.com/v1';
 const BEKLEME_MS = 15 * 1000;
 const MAX_SORU = 1000;
 
-async function callOpenAI(base, apiKey, model, messages, timeoutMs) {
+async function callOpenAI(base, apiKey, model, messages, timeoutMs, extra) {
   const headers = { 'Content-Type': 'application/json' };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
   const res = await fetch(`${base}/chat/completions`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 1024 }),
+    body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 1024, ...(extra || {}) }),
     signal: AbortSignal.timeout(timeoutMs || 180000),
   });
   if (!res.ok) {
@@ -60,7 +60,19 @@ async function chat(model, messages, lang) {
     throw err;
   }
   try {
-    return await callOpenAI(base, process.env.LOCAL_API_KEY || null, model.model, tum, 60000);
+    // Ollama'nın OpenAI-uyumlu uç noktası /v1 altındadır (/api değil!).
+    // think:false -> düşünen modeller (qwen3.5) doğrudan cevap verir,
+    // yoksa içerik boş gelip "boş cevap" hatası olur + hem yavaşlar.
+    const yerelCagri = (ms) => callOpenAI(base + '/v1', process.env.LOCAL_API_KEY || null, model.model, tum, ms, { think: false });
+    try {
+      return await yerelCagri(60000);
+    } catch (ilk) {
+      // Model VRAM'e yüklenirken ilk istek boş dönebilir -> bir kez daha dene
+      if (String((ilk && ilk.message) || '').includes('boş cevap')) {
+        return await yerelCagri(90000);
+      }
+      throw ilk;
+    }
   } catch (e) {
     if (erisilemezMi(e)) {
       const err = new Error('LOCAL_UNREACHABLE');
