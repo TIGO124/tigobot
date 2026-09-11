@@ -16,7 +16,9 @@ function intentAyar() {
   const t = parseInt(process.env.AI_INTENT_TIMEOUT_MS, 10);
   return {
     timeoutMs: Number.isFinite(t) ? Math.min(300000, Math.max(30000, t)) : 120000,
-    numCtx: 8192,
+    // Niyet çözümleme kısa iştir; 8192 ctx 9B'de KV baskısı yapar (4B ile
+    // aynı VRAM'de şişince 500/OOM olur). 4096 fazlasıyla yeter.
+    numCtx: 4096,
   };
 }
 
@@ -79,7 +81,11 @@ function argDogrula(op, args) {
       const n = parseInt(v, 10);
       if (Number.isFinite(n)) duz[k] = n;
     } else if (tip === 'array') {
-      if (Array.isArray(v)) duz[k] = v.map(x => String(x)).slice(0, 4);
+      if (Array.isArray(v)) {
+        const min = Number.isFinite(ozellik[k].minItems) ? ozellik[k].minItems : 0;
+        const dizi = v.map(x => String(x)).slice(0, 4);
+        if (dizi.length >= min) duz[k] = dizi;
+      }
     } else {
       duz[k] = String(v).slice(0, 1500);
     }

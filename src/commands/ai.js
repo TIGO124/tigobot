@@ -36,17 +36,20 @@ function build(lang) {
     }
     const model = effectiveModel(interaction.guildId);
     // AI yönetim: soru yönetim niyeti taşıyorsa önce burası ele alır.
+    // Ucuz kelime ön-filtresi: alamet yoksa 9B'ye sorulmaz, sohbet gecikmez.
     try {
-      const { yonetimAkis } = require('../ai-yonetim');
-      const gonder = o => (interaction.replied || interaction.deferred
-        ? interaction.followUp(o)
-        : interaction.reply(o));
-      const eleAlindi = await yonetimAkis(
-        { guild: interaction.guild, channel: interaction.channel, member: interaction.member, user: interaction.user, lang: L },
-        soru,
-        gonder
-      );
-      if (eleAlindi) return;
+      const { yonetimAkis, yonetimBenzeriMi } = require('../ai-yonetim');
+      if (yonetimBenzeriMi(soru)) {
+        const gonder = o => (interaction.replied || interaction.deferred
+          ? interaction.followUp(o)
+          : interaction.reply(o));
+        const eleAlindi = await yonetimAkis(
+          { guild: interaction.guild, channel: interaction.channel, member: interaction.member, user: interaction.user, lang: L },
+          soru,
+          gonder
+        );
+        if (eleAlindi) return;
+      }
     } catch {}
     const baslangic = animMetni(0, L);
     await interaction.deferReply();

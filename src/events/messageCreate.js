@@ -50,14 +50,17 @@ async function handleMention(message) {
   const baslangic = animMetni(0, L0);
   // AI yönetim: "tigobot general kanalını oluştur" gibi istekler önce buraya düşer.
   // Yönetim değilse/yetkisizse false döner ve normal sohbet devam eder.
+  // Ucuz kelime ön-filtresi: yönetim alameti yoksa 9B'ye hiç sorulmaz (sohbet gecikmez).
   try {
-    const { yonetimAkis } = require('../ai-yonetim');
-    const eleAlindi = await yonetimAkis(
-      { guild: message.guild, channel: message.channel, member: message.member, user: message.author, lang: L0 },
-      soru,
-      o => message.reply(o)
-    );
-    if (eleAlindi) return true;
+    const { yonetimAkis, yonetimBenzeriMi } = require('../ai-yonetim');
+    if (yonetimBenzeriMi(soru)) {
+      const eleAlindi = await yonetimAkis(
+        { guild: message.guild, channel: message.channel, member: message.member, user: message.author, lang: L0 },
+        soru,
+        o => message.reply(o)
+      );
+      if (eleAlindi) return true;
+    }
   } catch {}
   let mesaj;
   try {

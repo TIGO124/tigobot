@@ -20,7 +20,7 @@ function uyeCoz(guild, str) {
   let id = null;
   const men = s.match(/^<@!?(\d+)>$/);
   if (men) id = men[1];
-  else if (/^\d{10,}$/.test(s)) id = s;
+  else if (/^\d+$/.test(s)) id = s;
   if (id) {
     try {
       const m = guild.members.cache.get(id);
@@ -45,7 +45,7 @@ function rolCoz(guild, str) {
   let id = null;
   const men = s.match(/^<@&(\d+)>$/);
   if (men) id = men[1];
-  else if (/^\d{10,}$/.test(s)) id = s;
+  else if (/^\d+$/.test(s)) id = s;
   try {
     if (id) {
       const r = guild.roles.cache.get(id);
@@ -64,7 +64,7 @@ function kanalCoz(guild, str) {
   let id = null;
   const men = s.match(/^<#(\d+)>$/);
   if (men) id = men[1];
-  else if (/^\d{10,}$/.test(s)) id = s;
+  else if (/^\d+$/.test(s)) id = s;
   try {
     if (id) {
       const c = guild.channels.cache.get(id);
@@ -194,8 +194,9 @@ const KATALOG = {
       const hedef = uyeCoz(ctx.guild, a.hedef);
       const g = hedefGuvenli(ctx.guild, hedef, L);
       if (!g.ok) return g;
-      const dk = Math.min(40320, Math.max(1, parseInt(a.sure, 10) || 0));
-      if (!dk) return { ok: false, text: t(L, 'mg.sureYok') };
+      const hamSure = parseInt(a.sure, 10);
+      if (!Number.isFinite(hamSure) || hamSure < 1) return { ok: false, text: t(L, 'mg.sureYok') };
+      const dk = Math.min(40320, hamSure);
       if (!hedef.moderatable) return { ok: false, text: t(L, 'mg.hiyerarsi') };
       try {
         const sebep = temizAd(a.sebep || t(L, 'warn.noreason'), 400);
@@ -254,8 +255,9 @@ const KATALOG = {
     tool: { name: 'mesaj_sil', description: 'Bulunulan kanaldan son mesajları toplu siler/temizler.', parameters: { type: 'object', properties: { sayi: { type: 'integer', description: 'Adet (1-100)' } }, required: ['sayi'] } },
     async run(ctx, a) {
       const L = ctx.lang;
-      const sayi = Math.min(100, Math.max(1, parseInt(a.sayi, 10) || 0));
-      if (!sayi) return { ok: false, text: t(L, 'mg.sayiYok') };
+      const hamSayi = parseInt(a.sayi, 10);
+      if (!Number.isFinite(hamSayi) || hamSayi < 1) return { ok: false, text: t(L, 'mg.sayiYok') };
+      const sayi = Math.min(100, hamSayi);
       try {
         const silinen = await ctx.channel.bulkDelete(sayi, true);
         return { ok: true, text: t(L, 'mg.silOk', { n: silinen.size }) };
@@ -281,7 +283,7 @@ const KATALOG = {
   },
   anket_baslat: {
     risk: 'dusuk',
-    tool: { name: 'anket_baslat', description: 'Butonlu anket/oylama başlatır/açar (2-4 seçenek).', parameters: { type: 'object', properties: { soru: { type: 'string', description: 'Anket sorusu' }, secenekler: { type: 'array', items: { type: 'string' }, description: '2-4 seçenek' } }, required: ['soru', 'secenekler'] } },
+    tool: { name: 'anket_baslat', description: 'Butonlu anket/oylama başlatır/açar (2-4 seçenek).', parameters: { type: 'object', properties: { soru: { type: 'string', description: 'Anket sorusu' }, secenekler: { type: 'array', items: { type: 'string' }, minItems: 2, description: '2-4 seçenek' } }, required: ['soru', 'secenekler'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const soru = temizAd(a.soru, 240);
@@ -309,9 +311,11 @@ const KATALOG = {
     tool: { name: 'hatirlatici_kur', description: 'Belirtilen süre sonra hatırlatma/hatırlatıcı/alarm gönderir/kurar.', parameters: { type: 'object', properties: { sure: { type: 'integer', description: 'Dakika (1-10080)' }, mesaj: { type: 'string', description: 'Hatırlatma metni' } }, required: ['sure', 'mesaj'] } },
     async run(ctx, a) {
       const L = ctx.lang;
-      const dk = Math.min(10080, Math.max(1, parseInt(a.sure, 10) || 0));
+      const hamDk = parseInt(a.sure, 10);
+      if (!Number.isFinite(hamDk) || hamDk < 1) return { ok: false, text: t(L, 'mg.hatirlaticiYok') };
+      const dk = Math.min(10080, hamDk);
       const mesaj = temizAd(a.mesaj, 1500);
-      if (!dk || !mesaj) return { ok: false, text: t(L, 'mg.hatirlaticiYok') };
+      if (!mesaj) return { ok: false, text: t(L, 'mg.hatirlaticiYok') };
       const kanal = ctx.channel;
       const kim = ctx.user;
       setTimeout(() => {

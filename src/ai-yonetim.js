@@ -88,11 +88,17 @@ async function onaySor(gonder, ctx, op, args) {
 // Yönetim fiili çağrıştıran kelimeler (sadece HATA yolunda kullanılır:
 // niyet çözümleme patlarsa ve soru buna benziyorsa sessiz sohbete düşmek
 // yerine kısa hata gösterilir).
-const YONETIM_KELIME = ['kanal', 'kategori', 'grup', 'rol', 'rütbe', 'rutbe', 'sustur', 'timeout', 'mute', 'yasakla', 'ban', 'kick', 'uyar', 'sayaç', 'sayac', 'anket', 'oylama', 'hatırlat', 'hatirlat', 'oluştur', 'olustur'];
+const YONETIM_KELIME = ['kanal', 'kategori', 'grup', 'rol', 'rütbe', 'rutbe', 'sustur', 'timeout', 'mute', 'yasakla', 'ban', 'kick', 'uyar', 'warn', 'sayaç', 'sayac', 'counter', 'anket', 'poll', 'oylama', 'hatırlat', 'hatirlat', 'remind', 'oluştur', 'olustur', 'create', 'channel', 'category', 'group', 'role', 'delete', 'clear', 'temizle', 'sil'];
+
+// Kısa anahtarlarla çakışan sıradan kelimeler (bana->ban, kontrol->rol):
+// bunlar ayıklanır, kalan metinde arama yapılır.
+const BLOKLU_KELIME = new Set(['bana', 'kontrol', 'parola', 'banka', 'asil', 'nesil', 'vasıf']);
 
 function yonetimBenzeriMi(soru) {
-  const s = String(soru || '').toLowerCase();
-  return YONETIM_KELIME.some(k => s.includes(k));
+  const ham = String(soru || '').toLowerCase();
+  const temiz = ham.split(/[^a-zçğıöşü0-9]+/u).filter(w => w && !BLOKLU_KELIME.has(w)).join(' ');
+  if (!temiz) return false;
+  return YONETIM_KELIME.some(k => temiz.includes(k));
 }
 
 function iz(neden, ctx, ekstra) {
@@ -128,9 +134,16 @@ async function yonetimAkis(ctx, soru, gonder) {
         await gonder({ content: t(L, 'mg.modelYok') }).catch(() => {});
         return true;
       }
+      // PC'de model patladıysa (500: genelde VRAM/OOM) net çözüm söyle
+      if (/AI hatası \(5\d\d\)|out of memory|memory|unable to load/i.test(msg)) {
+        await gonder({ content: t(L, 'mg.modelHata') }).catch(() => {});
+        return true;
+      }
       // Soru yönetime benziyorsa sessizliğe gömme, kısa hata göster
+      // (teknik detay sanitize edilir; bot özeldir, kanalda görünmesi sorun değil)
       if (yonetimBenzeriMi(soru)) {
-        await gonder({ content: t(L, 'mg.yonetimHata') }).catch(() => {});
+        const { sanitize } = require('./sanitize');
+        await gonder({ content: t(L, 'mg.yonetimHata', { teknik: sanitize(msg).slice(0, 120) || '?' }) }).catch(() => {});
         return true;
       }
       return false;
@@ -155,4 +168,4 @@ async function yonetimAkis(ctx, soru, gonder) {
   }
 }
 
-module.exports = { yonetimAkis, bekleyenAl, opAdi, denetim };
+module.exports = { yonetimAkis, bekleyenAl, opAdi, denetim, yonetimBenzeriMi };
