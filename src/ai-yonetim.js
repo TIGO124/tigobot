@@ -123,6 +123,11 @@ async function yonetimAkis(ctx, soru, gonder) {
         return true;
       }
       iz('niyet-hata', ctx, msg);
+      // Model PC'de yoksa (404) kullanıcıya net çözüm söyle
+      if (/AI hatası \(404\)|model.*not found|does not exist|not found/i.test(msg)) {
+        await gonder({ content: t(L, 'mg.modelYok') }).catch(() => {});
+        return true;
+      }
       // Soru yönetime benziyorsa sessizliğe gömme, kısa hata göster
       if (yonetimBenzeriMi(soru)) {
         await gonder({ content: t(L, 'mg.yonetimHata') }).catch(() => {});
