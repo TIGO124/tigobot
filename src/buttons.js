@@ -7,6 +7,40 @@ async function handle(interaction) {
   const L = getLang(interaction.guildId);
   const id = interaction.customId;
 
+  // AI yönetim onayı: ayonay_<id> / ayred_<id>
+  if (id.startsWith('ayonay_') || id.startsWith('ayred_')) {
+    const onay = id.startsWith('ayonay_');
+    const bid = id.slice(onay ? 7 : 6);
+    const { bekleyenAl } = require('./ai-yonetim');
+    const { KATALOG } = require('./ai-actions');
+    const { sahipMi } = require('./owner');
+    const b = bekleyenAl(bid);
+    if (!b) return interaction.reply({ content: t(L, 'mg.onayGecti'), ephemeral: true });
+    const istekSahibi = interaction.user.id === b.userId;
+    let sunucuSahibi = false;
+    try { sunucuSahibi = interaction.guild && interaction.guild.ownerId === interaction.user.id; } catch {}
+    if (!istekSahibi && !sunucuSahibi && !sahipMi(interaction.user)) {
+      return interaction.reply({ content: t(L, 'mg.onayYetki'), ephemeral: true });
+    }
+    if (!onay) {
+      await interaction.update({ content: t(L, 'mg.reddedildi'), components: [] }).catch(() => {});
+      return;
+    }
+    const giris = KATALOG[b.op];
+    if (!giris) {
+      await interaction.update({ content: t(L, 'mg.islemKapali'), components: [] }).catch(() => {});
+      return;
+    }
+    const ctx = { guild: interaction.guild, channel: interaction.channel, member: interaction.member, user: interaction.user, lang: b.lang, client: interaction.client };
+    const sonuc = await giris.run(ctx, b.args);
+    try {
+      const { denetim } = require('./ai-yonetim');
+      denetim(ctx, b.op, b.args, sonuc);
+    } catch {}
+    await interaction.update({ content: sonuc.text, components: [] }).catch(() => {});
+    return;
+  }
+
   // Tepki-rol: rr_<rolId>
   if (id.startsWith('rr_')) {
     const rolId = id.slice(3);

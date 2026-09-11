@@ -14,8 +14,10 @@ const { getLang } = require('./i18n');
 const { queueDepth } = require('./ai');
 const { imgQueueDepth } = require('./ai-image');
 const { acikMi, ayarla } = require('./local');
-const { allModels, isChatEnabled, setChatEnabled, getGlobalModel, setGlobalModel, getGuildModelKey, setGuildModel, effectiveModel } = require('./ai-models');
+const { allModels, isChatEnabled, setChatEnabled, getGlobalModel, setGlobalModel, getGuildModelKey, setGuildModel, effectiveModel, agentBilgisi, setGlobalAgent, getGuildAgentKey, setGuildAgent, effectiveAgent } = require('./ai-models');
 const { IMG_MODELS, isImgEnabled, setImgEnabled, getGlobalImgModel, setGlobalImgModel, getGuildImgModelKey, setGuildImgModel, effectiveImgModel } = require('./ai-image');
+const perms = require('./ai-perms');
+const { KATALOG } = require('./ai-actions');
 
 function guildList(client) {
   const out = [];
@@ -156,6 +158,83 @@ function start(client) {
         });
         return;
       }
+      if (req.method === 'GET' && url.pathname === '/api/aimanage') {
+        if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
+        const s = perms.stateOku();
+        return json(res, 200, {
+          acik: s.acik,
+          kim: s.kim,
+          kimler: perms.KIMLER,
+          agent: agentBilgisi(),
+          guilds: guildList(client).map(g => ({
+            ...g, agent: getGuildAgentKey(g.id), agentEffective: effectiveAgent(g.id).key,
+            mgmtAcik: perms.acikMi(g.id), mgmtKim: perms.getKim(g.id), mgmtLog: perms.getLogKanal(g.id),
+          })),
+          islemler: Object.keys(KATALOG).map(k => ({
+            key: k,
+            risk: KATALOG[k].risk,
+            enabled: perms.isOpEnabled(k, KATALOG),
+            onay: KATALOG[k].risk === 'yuksek' ? perms.needsApproval(k) : null,
+          })),
+        });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/aimanage') {
+        if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
+        let body = '';
+        req.on('data', c => { body += c; });
+        req.on('end', () => {
+          try {
+            const p = JSON.parse(body || '{}');
+            if (typeof p.acik === 'boolean') perms.ayarla(p.acik);
+            if (typeof p.kim === 'string') {
+              if (!perms.setKim(p.kim)) return json(res, 400, { error: 'bilinmeyen kim' });
+            }
+            if (p.islem && typeof p.islem === 'object') {
+              for (const k of Object.keys(p.islem)) {
+                if (!KATALOG[k]) return json(res, 400, { error: 'bilinmeyen islem: ' + k });
+                perms.setOpEnabled(k, p.islem[k] === true);
+              }
+            }
+            if (p.onay && typeof p.onay === 'object') {
+              for (const k of Object.keys(p.onay)) {
+                if (!KATALOG[k] || KATALOG[k].risk !== 'yuksek') return json(res, 400, { error: 'onay verilemez: ' + k });
+                perms.setApproval(k, p.onay[k] === true);
+              }
+            }
+            if (typeof p.agentGlobal === 'string') {
+              if (!setGlobalAgent(p.agentGlobal)) return json(res, 400, { error: 'bilinmeyen ajan' });
+            }
+            if (p.agentGuild && typeof p.agentGuild === 'object') {
+              const { guildId, key } = p.agentGuild;
+              if (!guildId) return json(res, 400, { error: 'guildId gerekli' });
+              const m = setGuildAgent(guildId, key === null ? null : key);
+              if (key !== null && !m) return json(res, 400, { error: 'bilinmeyen ajan' });
+            }
+            if (p.mgmtGuild && typeof p.mgmtGuild === 'object') {
+              const { guildId, acik, kim, logKanal, sifirla } = p.mgmtGuild;
+              if (!guildId) return json(res, 400, { error: 'guildId gerekli' });
+              const patch = {};
+              if (typeof acik === 'boolean') patch.acik = acik;
+              if (typeof kim === 'string') {
+                if (!perms.KIMLER.includes(kim)) return json(res, 400, { error: 'bilinmeyen kim' });
+                patch.kim = kim;
+              }
+              if (typeof logKanal === 'string') {
+                if (!/^\d{10,}$/.test(logKanal)) return json(res, 400, { error: 'logKanal id olmalı' });
+                patch.logKanal = logKanal;
+              }
+              if (logKanal === null) patch.logKanal = null;
+              if (sifirla === true) patch.sifirla = true;
+              perms.setGuild(guildId, patch);
+            }
+            const s = perms.stateOku();
+            json(res, 200, { acik: s.acik, kim: s.kim });
+          } catch {
+            json(res, 400, { error: 'bad json' });
+          }
+        });
+        return;
+      }
       if (req.method === 'GET' && url.pathname === '/api/diag') {
         if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
         runDiag().then(
@@ -187,7 +266,9 @@ function start(client) {
             if (action === 'restart') {
               json(res, 200, { restarting: true });
               console.log('Panel: yeniden başlatılıyor...');
-              setTimeout(() => process.exit(0), 600); // Railway container'ı yeniden başlatır
+              // exit(0) KULLANMA: Railway temiz çıkışı "iş bitti" sayıp yeniden başlatmaz.
+              // Sıfır-dışı kod = crash sayılır ve platform otomatik restart eder.
+              setTimeout(() => process.exit(1), 600);
               return;
             }
             json(res, 400, { error: 'action: stop/start/restart gerekli' });

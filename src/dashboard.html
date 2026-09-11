@@ -197,6 +197,34 @@ tr:last-child td{border-bottom:none}
   </div>
 
   <div class="sec">
+    <h2>⭐ Yönetim Modelleri <span class="tag" id="agentTag">—</span></h2>
+    <p class="d">AI sunucu yönetimini (ajan) hangi model yapar. Yerel 9B her zaman kullanılabilir; NVIDIA önerilenleri tool-calling desteklidir.</p>
+    <div class="row" style="margin-bottom:12px">
+      <div style="flex:1;min-width:220px"><span class="flabel">Global ajan modeli</span><select class="sel" id="globalAgent"></select></div>
+    </div>
+    <div id="agentAktif"><div class="empty">yükleniyor…</div></div>
+    <h3 style="font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px">Seçilebilir ajanlar</h3>
+    <div id="agentOnerilen"></div>
+    <h3 style="font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px">Sunucuya özel ajan (boş = globali kullanır)</h3>
+    <div id="guildAgents"><div class="empty">yükleniyor…</div></div>
+  </div>
+
+  <div class="sec">
+    <h2>🛠️ AI Yönetim <span class="tag" id="mgmtTag">—</span></h2>
+    <p class="d">Doğal dille sunucu yönetimi: kanal/rol açma, rol verme, susturma vb. Yüksek riskli işlemler onay butonu ister.</p>
+    <div class="row" style="margin-bottom:12px">
+      <div class="switch" id="mgmtSw" title="AI Yönetim"></div>
+      <div><b id="mgmtTxt" style="font-size:14px">AI Yönetim</b>
+      <div class="sub">/ai, /yonetim ve tigobot mention ile çalışır</div></div>
+      <div class="sp" style="flex:1"></div>
+      <div style="min-width:200px"><span class="flabel">Kim kullanabilir</span><select class="sel" id="mgmtKim"></select></div>
+    </div>
+    <div id="mgmtIslemler"><div class="empty">yükleniyor…</div></div>
+    <h3 style="font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px">Sunucuya özel yönetim (boş = globali kullanır)</h3>
+    <div id="mgmtGuilds"><div class="empty">yükleniyor…</div></div>
+  </div>
+
+  <div class="sec">
     <h2>⚙️ Ayarlar <span class="tag">ayar</span></h2>
     <p class="d">Yerel AI anahtarı tüm sunucuları etkiler.</p>
     <div class="row">
@@ -367,6 +395,64 @@ async function postModel(payload, errMsg){
   try { return await api('/api/models', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); }
   catch(e){ if (!/401/.test(e.message||'')) alert(errMsg || 'Değişmedi, tekrar dene.'); throw e; }
 }
+async function postAimanage(payload){
+  try { return await api('/api/aimanage', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); }
+  catch(e){ if (!/401/.test(e.message||'')) alert('Değişmedi, tekrar dene.'); throw e; }
+}
+async function loadAimanage(){
+  const d = await api('/api/aimanage');
+  $('agentTag').textContent = 'aktif: ' + d.agent.aktif.key;
+  const secilebilir = d.agent.onerilen.filter(m => !m.kilitli);
+  $('globalAgent').innerHTML = secilebilir.map(m =>
+    `<option value="${esc(m.key)}"${m.key===d.agent.global?' selected':''}>${esc(m.name)} (${esc(m.kind)})</option>`).join('');
+  $('agentAktif').innerHTML = `<div class="mrow"><div class="grow"><b>🤖 ${esc(d.agent.aktif.name)}</b><code>${esc(d.agent.aktif.api)} • ajan (${esc(d.agent.aktif.kind || '')})</code></div><span class="kind">aktif</span></div>`;
+  $('agentOnerilen').innerHTML = d.agent.onerilen.map(m =>
+    `<div class="mrow${m.kilitli?' off':''}"><div class="grow"><b>${esc(m.name)}</b><code>${esc(m.api)}</code></div><span class="kind">${m.kilitli?'Faz 2':esc(m.kind)}</span></div>`).join('');
+  $('guildAgents').innerHTML = (d.guilds || []).length ? d.guilds.map(g =>
+    `<div class="mrow"><div class="grow"><b>${esc(g.name)}</b><code>ajan: ${esc(g.agentEffective)}${g.agent?' (özel)':''}</code></div>
+    <select class="sel" style="max-width:230px" title="Ajan modeli" onchange="setGuildAgent('${esc(g.id)}',this.value)">
+    <option value="">Ajan: Global</option>` +
+    secilebilir.map(m=>`<option value="${esc(m.key)}"${m.key===g.agent?' selected':''}>${esc(m.name)}</option>`).join('') +
+    `</select></div>`).join('') : '<div class="empty">sunucu yok</div>';
+  $('mgmtTag').textContent = d.acik ? 'açık • ' + d.kim : 'kapalı';
+  $('mgmtSw').classList.toggle('on', !!d.acik);
+  $('mgmtTxt').textContent = 'AI Yönetim: ' + (d.acik ? 'AÇIK' : 'KAPALI');
+  $('mgmtKim').innerHTML = d.kimler.map(k =>
+    `<option value="${esc(k)}"${k===d.kim?' selected':''}>${esc(k)}</option>`).join('');
+  $('mgmtIslemler').innerHTML = d.islemler.map(o => {
+    const onayHtml = o.risk === 'yuksek'
+      ? `<label class="pill" style="cursor:pointer" title="Onay istesin mi"><input type="checkbox"${o.onay?' checked':''} onchange="setOnay('${esc(o.key)}',this.checked)" style="accent-color:#ffcf5c"> onay</label>` : '';
+    return `<div class="mrow${o.enabled?'':' off'}"><div class="grow"><b>${esc(o.key)}</b><code>risk: ${esc(o.risk)}</code></div>${onayHtml}<div class="switch${o.enabled?' on':''}" onclick="toggleIslem('${esc(o.key)}',this)"></div></div>`;
+  }).join('');
+  $('mgmtGuilds').innerHTML = (d.guilds || []).length ? d.guilds.map(g =>
+    `<div class="mrow"><div class="grow"><b>${esc(g.name)}</b><code>${g.mgmtAcik?'açık':'kapalı'} • ${esc(g.mgmtKim)} • log: ${esc(g.mgmtLog || '-')}</code></div>
+    <div style="display:flex;gap:6px;align-items:center;flex:none;flex-wrap:wrap">
+    <div class="switch${g.mgmtAcik?' on':''}" title="Bu sunucuda açık" onclick="setMgmtGuild('${esc(g.id)}',{acik:!this.classList.contains('on')})"></div>
+    <select class="sel" style="max-width:150px" title="Kim" onchange="setMgmtGuild('${esc(g.id)}',{kim:this.value})">
+    ${d.kimler.map(k=>`<option value="${esc(k)}"${k===g.mgmtKim?' selected':''}>${esc(k)}</option>`).join('')}</select>
+    <input class="token" style="width:150px" placeholder="log kanal id" value="${esc(g.mgmtLog || '')}" title="Denetim log kanal ID (boş bırak + Enter = temizle)"
+      onchange="setMgmtGuild('${esc(g.id)}',{logKanal:this.value.trim() === '' ? null : this.value.trim()})">
+    <button class="btn" onclick="setMgmtGuild('${esc(g.id)}',{sifirla:true})">sıfırla</button>
+    </div></div>`).join('') : '<div class="empty">sunucu yok</div>';
+}
+async function setMgmtGuild(guildId, patch){
+  try { await postAimanage({ mgmtGuild: Object.assign({ guildId }, patch) }); loadAimanage().catch(()=>{}); } catch {}
+}
+async function toggleIslem(key, el){
+  const turnOn = !el.classList.contains('on');
+  el.style.opacity = '.4';
+  try { await postAimanage({ islem: { [key]: turnOn } }); loadAimanage().catch(()=>{}); } catch {}
+  el.style.opacity = '';
+}
+async function setOnay(key, istiyor){
+  try { await postAimanage({ onay: { [key]: istiyor } }); loadAimanage().catch(()=>{}); } catch {}
+}
+$('globalAgent').onchange = async e => {
+  try { await postAimanage({ agentGlobal: e.target.value }); loadAimanage().catch(()=>{}); } catch {}
+};
+async function setGuildAgent(guildId, key){
+  try { await postAimanage({ agentGuild: { guildId, key: key || null } }); loadAimanage().catch(()=>{}); } catch {}
+}
 $('globalChat').onchange = e => postModel({ type:'globalChat', key: e.target.value }).then(()=>loadModels().catch(()=>{})).catch(()=>{});
 $('globalImg').onchange = e => postModel({ type:'globalImg', key: e.target.value }).then(()=>loadModels().catch(()=>{})).catch(()=>{});
 async function setGuildModel(guildId, key, type){
@@ -384,9 +470,16 @@ async function toggleModel(type, key, el){
   el.style.opacity = '';
 }
 async function refreshAll(){
-  try { await Promise.all([loadStats(), loadConfig(), loadLogs(), loadModels()]); hideGate(); }
+  try { await Promise.all([loadStats(), loadConfig(), loadLogs(), loadModels(), loadAimanage()]); hideGate(); }
   catch(e){ if (!/401/.test(e.message||'')) $('conn').textContent='bağlantı hatası'; }
 }
+$('mgmtSw').onclick = async () => {
+  const turnOn = !$('mgmtSw').classList.contains('on');
+  try { await postAimanage({ acik: turnOn }); loadAimanage().catch(()=>{}); } catch {}
+};
+$('mgmtKim').onchange = async e => {
+  try { await postAimanage({ kim: e.target.value }); loadAimanage().catch(()=>{}); } catch {}
+};
 $('refresh').onclick = refreshAll;
 $('logBtn').onclick = () => loadLogs().catch(()=>{});
 $('level').onchange = () => loadLogs().catch(()=>{});
