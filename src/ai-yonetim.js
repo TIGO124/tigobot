@@ -85,30 +85,52 @@ async function onaySor(gonder, ctx, op, args) {
   await gonder({ content: t(L, 'mg.onaySor', { op: opAdi(op, L), ozet }), components: [row] });
 }
 
+// Yönetim fiili çağrıştıran kelimeler (sadece HATA yolunda kullanılır:
+// niyet çözümleme patlarsa ve soru buna benziyorsa sessiz sohbete düşmek
+// yerine kısa hata gösterilir).
+const YONETIM_KELIME = ['kanal', 'kategori', 'grup', 'rol', 'rütbe', 'rutbe', 'sustur', 'timeout', 'mute', 'yasakla', 'ban', 'kick', 'uyar', 'sayaç', 'sayac', 'anket', 'oylama', 'hatırlat', 'hatirlat', 'oluştur', 'olustur'];
+
+function yonetimBenzeriMi(soru) {
+  const s = String(soru || '').toLowerCase();
+  return YONETIM_KELIME.some(k => s.includes(k));
+}
+
+function iz(neden, ctx, ekstra) {
+  try { console.log(`AI-YONETIM-IZ ${ctx.guild && ctx.guild.id}/${ctx.user && ctx.user.tag} ${neden}${ekstra ? ' ' + String(ekstra).slice(0, 160) : ''}`); } catch {}
+}
+
 // ctx: { guild, channel, member, user, lang }
 // gonder: (payload) => Promise (reply/send soyutlaması)
 async function yonetimAkis(ctx, soru, gonder) {
   const L = ctx.lang;
   try {
     if (!ctx.guild) return false;
-    if (!perms.acikMi(ctx.guild.id)) return false;
-    if (!perms.kullanabilirMiYonetim(ctx.user, ctx.member, ctx.guild)) return false;
+    if (!perms.acikMi(ctx.guild.id)) { iz('kapali', ctx); return false; }
+    if (!perms.kullanabilirMiYonetim(ctx.user, ctx.member, ctx.guild)) { iz('yetkisiz', ctx); return false; }
     let niyet = null;
     try {
       niyet = await cozumle(soru, L, ctx.guild.id);
     } catch (e) {
       const msg = String((e && e.message) || '');
       if (e && e.code === 'LOCAL_UNREACHABLE' || /LOCAL_UNREACHABLE|fetch failed|timeout/i.test(msg)) {
+        iz('yerel-erisilemiyor', ctx, msg);
         await gonder({ content: t(L, 'mg.yerelKapali') }).catch(() => {});
         return true;
       }
       if (/401|403/.test(msg) || /NVIDIA_API_KEY/i.test(msg)) {
+        iz('ajan-hata', ctx, msg);
         await gonder({ content: t(L, 'mg.ajanHata') }).catch(() => {});
+        return true;
+      }
+      iz('niyet-hata', ctx, msg);
+      // Soru yönetime benziyorsa sessizliğe gömme, kısa hata göster
+      if (yonetimBenzeriMi(soru)) {
+        await gonder({ content: t(L, 'mg.yonetimHata') }).catch(() => {});
         return true;
       }
       return false;
     }
-    if (!niyet || !niyet.op) return false; // yönetim değil -> normal sohbet
+    if (!niyet || !niyet.op) { iz('eslesme-yok', ctx, soru); return false; } // yönetim değil -> normal sohbet
     const giris = KATALOG[niyet.op];
     if (!giris || !perms.isOpEnabled(niyet.op, KATALOG)) {
       await gonder({ content: t(L, 'mg.islemKapali') }).catch(() => {});
@@ -122,7 +144,8 @@ async function yonetimAkis(ctx, soru, gonder) {
     denetim(ctx, niyet.op, niyet.args, sonuc);
     await gonder({ content: sonuc.text }).catch(() => {});
     return true;
-  } catch {
+  } catch (e) {
+    iz('akis-hata', ctx, e && e.message);
     return false;
   }
 }

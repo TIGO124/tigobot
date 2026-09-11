@@ -42,6 +42,21 @@ function ajanHedef(guildId) {
   return { yol: 'local', base, model: ajan.model };
 }
 
+function yerelUnreachable() {
+  const err = new Error('LOCAL_UNREACHABLE');
+  err.code = 'LOCAL_UNREACHABLE';
+  return err;
+}
+
+// Ağ/timeout hatası mı? (tünel kapalı, PC kapalı, süre aşımı)
+function agHatasiMi(e) {
+  if (!e) return false;
+  if (e.code === 'LOCAL_UNREACHABLE') return true;
+  if (e.name === 'TimeoutError' || e.name === 'AbortError') return true;
+  if (e instanceof TypeError) return true;
+  return /fetch failed|connect|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|EPIPE|timeout|aborted|socket hang up/i.test(String(e.message || ''));
+}
+
 function sistemDili(lang) {
   const L = lang === 'en' ? 'en' : 'tr';
   return L === 'en'
@@ -168,10 +183,28 @@ async function cozumle(soru, lang, guildId) {
     const n = await nativeCozumle(hedef.base, hedef.model, soru, lang, ayar);
     if (n.op) return n;
   } catch (e) {
-    // 404 (eski Ollama) dışında hata yukarı taşınır; native yoksa JSON denenir
-    if (!/AI hatası \(404\)/.test(String((e && e.message) || ''))) throw e;
+    // Native hata (404 eski sürüm, 400 tools-desteksiz, 500 model sorunu):
+    // önce JSON yedeği denenir; ağ hatasıysa üstte de ele alınır.
+    if (agHatasiMi(e)) {
+      try {
+        return await jsonCozumle(hedef.base, hedef.model, soru, lang, ayar);
+      } catch {
+        throw yerelUnreachable();
+      }
+    }
+    try {
+      return await jsonCozumle(hedef.base, hedef.model, soru, lang, ayar);
+    } catch (e2) {
+      if (agHatasiMi(e2)) throw yerelUnreachable();
+      throw e;
+    }
   }
-  return jsonCozumle(hedef.base, hedef.model, soru, lang, ayar);
+  try {
+    return await jsonCozumle(hedef.base, hedef.model, soru, lang, ayar);
+  } catch (e) {
+    if (agHatasiMi(e)) throw yerelUnreachable();
+    throw e;
+  }
 }
 
 // NVIDIA native tools yolu (OpenAI-uyumlu).

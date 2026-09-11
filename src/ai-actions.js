@@ -94,7 +94,7 @@ function hedefGuvenli(guild, hedef, L) {
 const KATALOG = {
   kanal_ac: {
     risk: 'dusuk',
-    tool: { name: 'kanal_ac', description: 'Sunucuda metin veya ses kanalı açar.', parameters: { type: 'object', properties: { ad: { type: 'string', description: 'Kanal adı' }, tur: { type: 'string', enum: ['metin', 'ses'], description: 'Kanal türü' } }, required: ['ad', 'tur'] } },
+    tool: { name: 'kanal_ac', description: 'Sunucuda metin veya ses kanalı açar/oluşturur/ekler. Kullanıcı kanal, oda, chat, sohbet odası derse bu araç.', parameters: { type: 'object', properties: { ad: { type: 'string', description: 'Kanal adı' }, tur: { type: 'string', enum: ['metin', 'ses'], description: 'Kanal türü' } }, required: ['ad', 'tur'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const ad = temizAd(a.ad, 90).toLowerCase().replace(/\s+/g, '-');
@@ -112,7 +112,7 @@ const KATALOG = {
   },
   kanal_sil: {
     risk: 'yuksek',
-    tool: { name: 'kanal_sil', description: 'Sunucudaki bir kanalı SİLER. Sadece kullanıcı açıkça sil derse kullan.', parameters: { type: 'object', properties: { ad: { type: 'string', description: 'Silinecek kanal adı' } }, required: ['ad'] } },
+    tool: { name: 'kanal_sil', description: 'Sunucudaki bir kanalı/odayı SİLER/kaldırır. Sadece kullanıcı açıkça sil/kaldır derse kullan.', parameters: { type: 'object', properties: { ad: { type: 'string', description: 'Silinecek kanal adı' } }, required: ['ad'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const kanal = kanalCoz(ctx.guild, a.ad);
@@ -126,7 +126,7 @@ const KATALOG = {
   },
   kategori_ac: {
     risk: 'dusuk',
-    tool: { name: 'kategori_ac', description: 'Sunucuda kategori (grup) açar.', parameters: { type: 'object', properties: { ad: { type: 'string', description: 'Kategori adı' } }, required: ['ad'] } },
+    tool: { name: 'kategori_ac', description: 'Sunucuda kategori/grup açar/oluşturur/ekler. Kullanıcı grup, kategori, bölüm derse BU araç (kanal_ac değil).', parameters: { type: 'object', properties: { ad: { type: 'string', description: 'Kategori/grup adı' } }, required: ['ad'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const ad = temizAd(a.ad, 90);
@@ -139,7 +139,7 @@ const KATALOG = {
   },
   rol_olustur: {
     risk: 'dusuk',
-    tool: { name: 'rol_olustur', description: 'Sunucuda yeni rol oluşturur.', parameters: { type: 'object', properties: { ad: { type: 'string', description: 'Rol adı' } }, required: ['ad'] } },
+    tool: { name: 'rol_olustur', description: 'Sunucuda yeni rol/rütbe oluşturur/ekler.', parameters: { type: 'object', properties: { ad: { type: 'string', description: 'Rol adı' } }, required: ['ad'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const ad = temizAd(a.ad, 90);
@@ -152,7 +152,7 @@ const KATALOG = {
   },
   rol_ver: {
     risk: 'yuksek',
-    tool: { name: 'rol_ver', description: 'Bir kullanıcıya rol verir.', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, rol: { type: 'string', description: 'Rol adı' } }, required: ['hedef', 'rol'] } },
+    tool: { name: 'rol_ver', description: 'Bir kullanıcıya/kullanıcıya rol/rütbe verir/ekler/tanımlar.', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, rol: { type: 'string', description: 'Rol adı' } }, required: ['hedef', 'rol'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const hedef = uyeCoz(ctx.guild, a.hedef);
@@ -170,7 +170,7 @@ const KATALOG = {
   },
   rol_al: {
     risk: 'yuksek',
-    tool: { name: 'rol_al', description: 'Bir kullanıcıdan rol alır.', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, rol: { type: 'string', description: 'Rol adı' } }, required: ['hedef', 'rol'] } },
+    tool: { name: 'rol_al', description: 'Bir kullanıcıdan rol/rütbe alır/kaldırır/söker.', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, rol: { type: 'string', description: 'Rol adı' } }, required: ['hedef', 'rol'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const hedef = uyeCoz(ctx.guild, a.hedef);
@@ -188,7 +188,7 @@ const KATALOG = {
   },
   timeout: {
     risk: 'yuksek',
-    tool: { name: 'timeout', description: 'Bir üyeyi susturur.', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, sure: { type: 'integer', description: 'Dakika (1-40320)' }, sebep: { type: 'string', description: 'Sebep' } }, required: ['hedef', 'sure'] } },
+    tool: { name: 'timeout', description: 'Bir üyeyi susturur/mute/timeout atar (konuşamaz).', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, sure: { type: 'integer', description: 'Dakika (1-40320)' }, sebep: { type: 'string', description: 'Sebep' } }, required: ['hedef', 'sure'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const hedef = uyeCoz(ctx.guild, a.hedef);
@@ -206,7 +206,7 @@ const KATALOG = {
   },
   kick: {
     risk: 'yuksek',
-    tool: { name: 'kick', description: 'Bir üyeyi sunucudan ATAR. Sadece kullanıcı açıkça at derse kullan.', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, sebep: { type: 'string', description: 'Sebep' } }, required: ['hedef'] } },
+    tool: { name: 'kick', description: 'Bir üyeyi sunucudan ATAR/kovar/çıkarır. Sadece kullanıcı açıkça at/kov derse kullan.', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, sebep: { type: 'string', description: 'Sebep' } }, required: ['hedef'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const hedef = uyeCoz(ctx.guild, a.hedef);
@@ -222,7 +222,7 @@ const KATALOG = {
   },
   ban: {
     risk: 'yuksek',
-    tool: { name: 'ban', description: 'Bir üyeyi sunucudan YASAKLAR. Sadece kullanıcı açıkça yasakla derse kullan.', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, sebep: { type: 'string', description: 'Sebep' } }, required: ['hedef'] } },
+    tool: { name: 'ban', description: 'Bir üyeyi sunucudan YASAKLAR/banlar/engeller. Sadece kullanıcı açıkça yasakla/banla derse kullan.', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, sebep: { type: 'string', description: 'Sebep' } }, required: ['hedef'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const hedef = uyeCoz(ctx.guild, a.hedef);
@@ -238,7 +238,7 @@ const KATALOG = {
   },
   uyari: {
     risk: 'dusuk',
-    tool: { name: 'uyari', description: 'Bir üyeyi uyarır (DM + kanala bilgi).', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, sebep: { type: 'string', description: 'Sebep' } }, required: ['hedef'] } },
+    tool: { name: 'uyari', description: 'Bir üyeyi uyarır/ikaz eder (DM + kanala bilgi).', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, sebep: { type: 'string', description: 'Sebep' } }, required: ['hedef'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const hedef = uyeCoz(ctx.guild, a.hedef);
@@ -251,7 +251,7 @@ const KATALOG = {
   },
   mesaj_sil: {
     risk: 'yuksek',
-    tool: { name: 'mesaj_sil', description: 'Bulunulan kanaldan son mesajları toplu siler.', parameters: { type: 'object', properties: { sayi: { type: 'integer', description: 'Adet (1-100)' } }, required: ['sayi'] } },
+    tool: { name: 'mesaj_sil', description: 'Bulunulan kanaldan son mesajları toplu siler/temizler.', parameters: { type: 'object', properties: { sayi: { type: 'integer', description: 'Adet (1-100)' } }, required: ['sayi'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const sayi = Math.min(100, Math.max(1, parseInt(a.sayi, 10) || 0));
@@ -264,7 +264,7 @@ const KATALOG = {
   },
   sayac_kur: {
     risk: 'dusuk',
-    tool: { name: 'sayac_kur', description: 'Üye sayısını gösteren ses kanalı açar.', parameters: { type: 'object', properties: {}, required: [] } },
+    tool: { name: 'sayac_kur', description: 'Üye sayısını/sayacını gösteren ses kanalı açar/kurar.', parameters: { type: 'object', properties: {}, required: [] } },
     async run(ctx) {
       const L = ctx.lang;
       try {
@@ -281,7 +281,7 @@ const KATALOG = {
   },
   anket_baslat: {
     risk: 'dusuk',
-    tool: { name: 'anket_baslat', description: 'Butonlu anket başlatır (2-4 seçenek).', parameters: { type: 'object', properties: { soru: { type: 'string', description: 'Anket sorusu' }, secenekler: { type: 'array', items: { type: 'string' }, description: '2-4 seçenek' } }, required: ['soru', 'secenekler'] } },
+    tool: { name: 'anket_baslat', description: 'Butonlu anket/oylama başlatır/açar (2-4 seçenek).', parameters: { type: 'object', properties: { soru: { type: 'string', description: 'Anket sorusu' }, secenekler: { type: 'array', items: { type: 'string' }, description: '2-4 seçenek' } }, required: ['soru', 'secenekler'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const soru = temizAd(a.soru, 240);
@@ -306,7 +306,7 @@ const KATALOG = {
   },
   hatirlatici_kur: {
     risk: 'dusuk',
-    tool: { name: 'hatirlatici_kur', description: 'Belirtilen süre sonra hatırlatma gönderir.', parameters: { type: 'object', properties: { sure: { type: 'integer', description: 'Dakika (1-10080)' }, mesaj: { type: 'string', description: 'Hatırlatma metni' } }, required: ['sure', 'mesaj'] } },
+    tool: { name: 'hatirlatici_kur', description: 'Belirtilen süre sonra hatırlatma/hatırlatıcı/alarm gönderir/kurar.', parameters: { type: 'object', properties: { sure: { type: 'integer', description: 'Dakika (1-10080)' }, mesaj: { type: 'string', description: 'Hatırlatma metni' } }, required: ['sure', 'mesaj'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const dk = Math.min(10080, Math.max(1, parseInt(a.sure, 10) || 0));
