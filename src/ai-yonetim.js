@@ -149,6 +149,7 @@ async function yonetimAkis(ctx, soru, gonder) {
       return false;
     }
     if (!niyet || !niyet.op) { iz('eslesme-yok', ctx, soru); return false; } // yönetim değil -> normal sohbet
+    if (niyet.yedek) iz('yedek-ajan', ctx, niyet.yedek); // yerel patladı, NVIDIA yedek çözdü
     const giris = KATALOG[niyet.op];
     if (!giris || !perms.isOpEnabled(niyet.op, KATALOG)) {
       await gonder({ content: t(L, 'mg.islemKapali') }).catch(() => {});

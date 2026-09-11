@@ -6,7 +6,7 @@
 // - Sonuç: { op, args } | { eslesme: false } (yönetim değil/sohbet) | hata fırlatır.
 const { sanitize } = require('./sanitize');
 const { acikMi } = require('./local');
-const { effectiveAgent } = require('./ai-models');
+const { effectiveAgent, findModel, isChatEnabled, agentModelleri } = require('./ai-models');
 const { KATALOG, toolListesi } = require('./ai-actions');
 const { isOpEnabled } = require('./ai-perms');
 
@@ -186,24 +186,43 @@ async function cozumle(soru, lang, guildId) {
     return nvidiaJsonCozumle(hedef, soru, lang, ayar);
   }
   try {
+    return await yerelDene(hedef, soru, lang, ayar);
+  } catch (yerelHata) {
+    // Yerel ajan patladı (500/OOM, 404, boş cevap, tünel kopuk):
+    // NVIDIA yedek ajanı dene (önce kimi-k2, yoksa ilk açık nvidia ajan).
+    const yh = nvidiaHedefiBul();
+    if (!yh) throw yerelHata;
+    try {
+      const n = await nvidiaNativeCozumle(yh, soru, lang, ayar);
+      if (n.op) return { op: n.op, args: n.args, yedek: yh.ad };
+      const j = await nvidiaJsonCozumle(yh, soru, lang, ayar);
+      if (j.op) return { op: j.op, args: j.args, yedek: yh.ad };
+    } catch (e2) {
+      // 401/403 (key sorunu) üstte ajanHata mesajına dönüşür
+      if (/401|403/.test(String((e2 && e2.message) || ''))) throw e2;
+      // Yedek de patladı: orijinal yerel hatayı taşı (mesajlar doğru kalsın)
+    }
+    throw yerelHata;
+  }
+}
+
+// Yerel niyet denemesi: native tools -> format:json.
+// Eşleşme yoksa { eslesme:false } döner (yedek denenmez); hatada fırlatır.
+async function yerelDene(hedef, soru, lang, ayar) {
+  try {
     const n = await nativeCozumle(hedef.base, hedef.model, soru, lang, ayar);
     if (n.op) return n;
   } catch (e) {
     // Native hata (404 eski sürüm, 400 tools-desteksiz, 500 model sorunu):
-    // önce JSON yedeği denenir; ağ hatasıysa üstte de ele alınır.
-    if (agHatasiMi(e)) {
+    // önce JSON yedeği denenir.
+    if (!agHatasiMi(e)) {
       try {
         return await jsonCozumle(hedef.base, hedef.model, soru, lang, ayar);
-      } catch {
-        throw yerelUnreachable();
+      } catch (e2) {
+        if (!agHatasiMi(e2)) throw e;
       }
     }
-    try {
-      return await jsonCozumle(hedef.base, hedef.model, soru, lang, ayar);
-    } catch (e2) {
-      if (agHatasiMi(e2)) throw yerelUnreachable();
-      throw e;
-    }
+    throw yerelUnreachable();
   }
   try {
     return await jsonCozumle(hedef.base, hedef.model, soru, lang, ayar);
@@ -211,6 +230,18 @@ async function cozumle(soru, lang, guildId) {
     if (agHatasiMi(e)) throw yerelUnreachable();
     throw e;
   }
+}
+
+// NVIDIA yedek ajan hedefi (kullanıcı seçimine dokunmaz, sadece arıza yedeği).
+function nvidiaHedefiBul() {
+  const key = (process.env.NVIDIA_API_KEY || '').trim();
+  if (!key) return null;
+  const kimi = findModel('nvidia-kimi-k2');
+  const sec = (kimi && kimi.agent === true && isChatEnabled(kimi.key))
+    ? kimi
+    : agentModelleri().find(m => m.kind === 'nvidia' && isChatEnabled(m.key));
+  if (!sec) return null;
+  return { yol: 'nvidia', model: sec.model, key, thinkingOff: sec.agentThinkingOff === true, ad: sec.key };
 }
 
 // NVIDIA native tools yolu (OpenAI-uyumlu).
