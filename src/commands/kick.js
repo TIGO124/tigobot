@@ -22,7 +22,11 @@ function build(lang) {
       await member.kick(reason);
       await interaction.reply(t(L, 'kick.done', { tag: member.user.tag, r: reason }));
     } catch {
-      await interaction.reply({ content: t(L, 'kick.err'), ephemeral: true });
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({ content: t(L, 'kick.err'), ephemeral: true }).catch(() => {});
+      } else {
+        await interaction.reply({ content: t(L, 'kick.err'), ephemeral: true }).catch(() => {});
+      }
     }
   }
 

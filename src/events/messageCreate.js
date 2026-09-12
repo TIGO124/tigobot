@@ -4,7 +4,7 @@ const { effectiveModel, defaultNvidia } = require('../ai-models');
 const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
 const { guvenilirMi } = require('../trust');
 const { t, getLang } = require('../i18n');
-const { aiAkis, durumEmbed, animMetni } = require('../ai-progress');
+const { aiAkis } = require('../ai-progress');
 const { isBlocked, blockRemainingMs } = require('../quota');
 const { bul: otocevapBul } = require('../otocevap');
 const { clip } = require('../sanitize');
@@ -47,7 +47,13 @@ async function handleMention(message) {
   }
 
   const model = effectiveModel(message.guildId);
-  const baslangic = animMetni(0, L0);
+  // Yanıt-bağlamı: bir mesaja yanıt olarak sorulduysa ("sence bu doğru mu"),
+  // yanıtlanan mesajın içeriği soruya eklenir.
+  let ekBaglam = '';
+  try {
+    const { yanitBaglami } = require('../baglam');
+    ekBaglam = (await yanitBaglami(message)) || '';
+  } catch {}
   // AI yönetim: "tigobot general kanalını oluştur" gibi istekler önce buraya düşer.
   // Yönetim değilse/yetkisizse false döner ve normal sohbet devam eder.
   // Ucuz kelime ön-filtresi: yönetim alameti yoksa 9B'ye hiç sorulmaz (sohbet gecikmez).
@@ -62,22 +68,17 @@ async function handleMention(message) {
       if (eleAlindi) return true;
     }
   } catch {}
-  let mesaj;
-  try {
-    mesaj = await message.reply({ embeds: [durumEmbed(baslangic, L0)] });
-  } catch {
-    return true;
-  }
   await aiAkis({
-    mesaj,
+    ilkGonder: o => message.reply(o),
     ekGonder: o => message.channel.send(o),
+    kanal: message.channel,
     userId: message.author.id,
     userTag: message.author.tag,
     guildId: message.guildId,
     model,
     yedek: defaultNvidia(),
     soru,
-    baslangic,
+    ekBaglam,
   });
   return true;
 }
@@ -111,9 +112,9 @@ module.exports = {
     // Yetkilileri atla
     if (message.member?.permissions.has(PermissionFlagsBits.ManageMessages)) return;
 
-    const content = message.content.toLowerCase();
-    const hasBanned = config.bannedWords.some(w => content.includes(w.toLowerCase()));
-    const hasInvite = config.blockInvites && config.inviteRegex.test(message.content);
+    const content = message.content;
+    const hasBanned = config.containsBanned(content);
+    const hasInvite = config.blockInvites && config.inviteRegex.test(content);
 
     if (hasBanned || hasInvite) {
       try { await message.delete(); } catch {}

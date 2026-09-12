@@ -29,7 +29,12 @@ function build(lang) {
         .setTimestamp();
       await interaction.reply({ embeds: [embed] });
     } catch {
-      await interaction.reply({ content: t(L, 'timeout.err'), ephemeral: true });
+      // İlk reply başarılı olup ikinci satır patlarsa çift-reply hatası vermesin
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({ content: t(L, 'timeout.err'), ephemeral: true }).catch(() => {});
+      } else {
+        await interaction.reply({ content: t(L, 'timeout.err'), ephemeral: true }).catch(() => {});
+      }
     }
   }
 

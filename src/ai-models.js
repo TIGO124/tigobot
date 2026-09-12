@@ -146,13 +146,14 @@ function defaultNvidia() {
 
 // --- AI yönetim (ajan) modeli ---
 // FAZ 2: ajan modeli seçilebilir (varsayılan yerel 9B).
-// Sıralama: kimi-k2 (ajan) > gpt-oss-120b (güçlü) > llama33 > mistral-nemotron/mixtral >
-// qwen-coder > lightning (hızlı) > nemotron-super/nano (thinking-off gerekli).
+// NVIDIA yedek sırası: ÖNCE canlı olduğu bilinenler.
+// (moonshotai/kimi-k2-instruct NVIDIA'da yayından kalktı -> 410; listede tutulur
+// ama başa alınmaz, dönerse yine kullanılır.)
 // Yönetimde KULLANILMAYANLAR (agent:false): deepseek-r1, deepseek-v4, gemma, mini-4b, llama-vision, qwen35-4b.
 const AGENT_NVIDIA_SIRALI = [
-  'nvidia-kimi-k2',
   'nvidia-gpt-oss-120b',
   'nvidia-gpt-oss',
+  'nvidia-kimi-k2',
   'nvidia-llama33',
   'nvidia-mistral-nemotron',
   'nvidia-mixtral',

@@ -14,7 +14,9 @@ function temizAd(s, max = 100) {
 }
 
 // --- Hedef çözümleyiciler (mention / ID / isim) ---
-function uyeCoz(guild, str) {
+// ID/mention önce önbellekte aranır, yoksa API'den çekilir
+// (kalabalık sunucularda çevrimdışı üyeler önbellekte olmayabilir).
+async function uyeCoz(guild, str) {
   if (!guild || !str) return null;
   const s = String(str).trim();
   let id = null;
@@ -26,6 +28,11 @@ function uyeCoz(guild, str) {
       const m = guild.members.cache.get(id);
       if (m) return m;
     } catch {}
+    try {
+      const m = await guild.members.fetch(id);
+      if (m) return m;
+    } catch {}
+    return null;
   }
   const k = s.toLowerCase().replace(/^@/, '');
   try {
@@ -155,7 +162,7 @@ const KATALOG = {
     tool: { name: 'rol_ver', description: 'Bir kullanıcıya/kullanıcıya rol/rütbe verir/ekler/tanımlar.', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, rol: { type: 'string', description: 'Rol adı' } }, required: ['hedef', 'rol'] } },
     async run(ctx, a) {
       const L = ctx.lang;
-      const hedef = uyeCoz(ctx.guild, a.hedef);
+      const hedef = await uyeCoz(ctx.guild, a.hedef);
       const g = hedefGuvenli(ctx.guild, hedef, L);
       if (!g.ok) return g;
       const rol = rolCoz(ctx.guild, a.rol);
@@ -173,7 +180,7 @@ const KATALOG = {
     tool: { name: 'rol_al', description: 'Bir kullanıcıdan rol/rütbe alır/kaldırır/söker.', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, rol: { type: 'string', description: 'Rol adı' } }, required: ['hedef', 'rol'] } },
     async run(ctx, a) {
       const L = ctx.lang;
-      const hedef = uyeCoz(ctx.guild, a.hedef);
+      const hedef = await uyeCoz(ctx.guild, a.hedef);
       const g = hedefGuvenli(ctx.guild, hedef, L);
       if (!g.ok) return g;
       const rol = rolCoz(ctx.guild, a.rol);
@@ -191,7 +198,7 @@ const KATALOG = {
     tool: { name: 'timeout', description: 'Bir üyeyi susturur/mute/timeout atar (konuşamaz).', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, sure: { type: 'integer', description: 'Dakika (1-40320)' }, sebep: { type: 'string', description: 'Sebep' } }, required: ['hedef', 'sure'] } },
     async run(ctx, a) {
       const L = ctx.lang;
-      const hedef = uyeCoz(ctx.guild, a.hedef);
+      const hedef = await uyeCoz(ctx.guild, a.hedef);
       const g = hedefGuvenli(ctx.guild, hedef, L);
       if (!g.ok) return g;
       const hamSure = parseInt(a.sure, 10);
@@ -210,7 +217,7 @@ const KATALOG = {
     tool: { name: 'kick', description: 'Bir üyeyi sunucudan ATAR/kovar/çıkarır. Sadece kullanıcı açıkça at/kov derse kullan.', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, sebep: { type: 'string', description: 'Sebep' } }, required: ['hedef'] } },
     async run(ctx, a) {
       const L = ctx.lang;
-      const hedef = uyeCoz(ctx.guild, a.hedef);
+      const hedef = await uyeCoz(ctx.guild, a.hedef);
       const g = hedefGuvenli(ctx.guild, hedef, L);
       if (!g.ok) return g;
       if (!hedef.kickable) return { ok: false, text: t(L, 'mg.hiyerarsi') };
@@ -226,7 +233,7 @@ const KATALOG = {
     tool: { name: 'ban', description: 'Bir üyeyi sunucudan YASAKLAR/banlar/engeller. Sadece kullanıcı açıkça yasakla/banla derse kullan.', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, sebep: { type: 'string', description: 'Sebep' } }, required: ['hedef'] } },
     async run(ctx, a) {
       const L = ctx.lang;
-      const hedef = uyeCoz(ctx.guild, a.hedef);
+      const hedef = await uyeCoz(ctx.guild, a.hedef);
       const g = hedefGuvenli(ctx.guild, hedef, L);
       if (!g.ok) return g;
       if (!hedef.bannable) return { ok: false, text: t(L, 'mg.hiyerarsi') };
@@ -242,7 +249,7 @@ const KATALOG = {
     tool: { name: 'uyari', description: 'Bir üyeyi uyarır/ikaz eder (DM + kanala bilgi).', parameters: { type: 'object', properties: { hedef: { type: 'string', description: 'Kullanıcı adı veya etiketi' }, sebep: { type: 'string', description: 'Sebep' } }, required: ['hedef'] } },
     async run(ctx, a) {
       const L = ctx.lang;
-      const hedef = uyeCoz(ctx.guild, a.hedef);
+      const hedef = await uyeCoz(ctx.guild, a.hedef);
       const g = hedefGuvenli(ctx.guild, hedef, L);
       if (!g.ok) return g;
       const sebep = temizAd(a.sebep || t(L, 'warn.noreason'), 400);
@@ -270,7 +277,11 @@ const KATALOG = {
     async run(ctx) {
       const L = ctx.lang;
       try {
-        const varOlan = ctx.guild.channels.cache.find(c => c.type === ChannelType.GuildVoice && (c.name || '').startsWith('Toplam'));
+        // İki dilin etiketi de tanınır (TR "Toplam", EN "Total Members"):
+        // yoksa dil değişmiş sunucularda kopya sayaç açılırdı.
+        const varOlan = ctx.guild.channels.cache.find(c =>
+          c.type === ChannelType.GuildVoice && /^(toplam|total members)/i.test((c.name || '').trim())
+        );
         if (varOlan) return { ok: true, text: t(L, 'counter.exists', { ch: varOlan }) };
         const kanal = await ctx.guild.channels.create({
           name: `Toplam Uye: ${ctx.guild.memberCount}`,

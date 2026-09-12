@@ -64,13 +64,20 @@ async function handle(interaction) {
     const idx = Number(idxStr);
     const polls = load('ankets.json', {});
     const poll = polls[pollId];
-    if (!poll || !poll.secenekler[idx]) {
+    if (!poll || !Array.isArray(poll.secenekler) || !poll.secenekler[idx]) {
       return interaction.reply({ content: t(L, 'poll.gone'), ephemeral: true });
     }
+    // Bozuk/eksik sayaç şeklini onar (negatif/NaN oy engellenir)
+    if (!Array.isArray(poll.counts) || poll.counts.length !== poll.secenekler.length) {
+      poll.counts = poll.secenekler.map(() => 0);
+    } else {
+      poll.counts = poll.counts.map(n => (Number.isFinite(n) && n > 0 ? Math.floor(n) : 0));
+    }
+    if (!poll.voters || typeof poll.voters !== 'object') poll.voters = {};
     const onceki = poll.voters[interaction.user.id];
     if (onceki === idx) {
       delete poll.voters[interaction.user.id];
-      poll.counts[idx]--;
+      poll.counts[idx] = Math.max(0, (poll.counts[idx] || 0) - 1);
       save('ankets.json', polls);
       await interaction.message.edit({ embeds: [anketEmbed(poll.soru, poll.secenekler, poll.counts, L)] }).catch(() => {});
       return interaction.reply({ content: t(L, 'poll.unvoted'), ephemeral: true });

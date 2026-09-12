@@ -64,6 +64,11 @@ console.log(`${client.commands.size} komut adı, ${eventSayi} event yüklendi.`)
 
 client.once(Events.ClientReady, async c => {
   console.log(`Giriş yapıldı: ${c.user.tag}`);
+  // AI öz-denetimi (erken uyarı): yerel + NVIDIA sağlığı loga düşer.
+  // Sorun istek anında değil, açılışta görünsün. Asla botu bloklamaz.
+  try {
+    require('./ai-intent').baslangicKontrolu().catch(() => {});
+  } catch {}
   // Web panel (DASHBOARD_PORT tanımlıysa açılır)
   try {
     require('./dashboard').start(c);

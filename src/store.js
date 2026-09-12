@@ -22,7 +22,12 @@ function load(file, fallback) {
 
 function save(file, data) {
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, file), JSON.stringify(data, null, 2));
+  // Atomik yazım: önce geçici dosyaya, sonra rename.
+  // Süreç yazım ortasında ölürse JSON yarım kalmaz (bozuk dosya -> veri kaybı olurdu).
+  const p = path.join(dir, file);
+  const tmp = `${p}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, p);
 }
 
 module.exports = { load, save };

@@ -3,7 +3,7 @@ const { t, getLang } = require('../i18n');
 const { effectiveModel, defaultNvidia } = require('../ai-models');
 const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
 const { guvenilirMi } = require('../trust');
-const { aiAkis, durumEmbed, animMetni } = require('../ai-progress');
+const { aiAkis } = require('../ai-progress');
 const { isBlocked, blockRemainingMs } = require('../quota');
 
 const NAMES = { tr: 'ai', en: 'ai' };
@@ -35,6 +35,11 @@ function build(lang) {
       markCooldown(interaction.user.id, interaction.guildId);
     }
     const model = effectiveModel(interaction.guildId);
+    // Önce defer: yönetim niyeti 9B/NVIDIA'ya sorulurken 3 sn etkileşim
+    // penceresi dolarsa, yavaş ajanda cevap sessizce ölüyordu (defer yoksa
+    // geç kalan reply "Unknown Interaction" olur). Defer'lı akışta gonder
+    // otomatik followUp'a düşer, sessiz ölüm kapanır.
+    await interaction.deferReply();
     // AI yönetim: soru yönetim niyeti taşıyorsa önce burası ele alır.
     // Ucuz kelime ön-filtresi: alamet yoksa 9B'ye sorulmaz, sohbet gecikmez.
     try {
@@ -48,22 +53,24 @@ function build(lang) {
           soru,
           gonder
         );
-        if (eleAlindi) return;
+        if (eleAlindi) {
+          // Defer placeholder'ı çöpe at: sonuç followUp ile geldi, boş
+          // "thinking..." mesajı kanalda kalmasın.
+          await interaction.deleteReply().catch(() => {});
+          return;
+        }
       }
     } catch {}
-    const baslangic = animMetni(0, L);
-    await interaction.deferReply();
-    const mesaj = await interaction.editReply({ embeds: [durumEmbed(baslangic, L)] });
     await aiAkis({
-      mesaj,
+      ilkGonder: o => interaction.editReply(o),
       ekGonder: o => interaction.followUp(o),
+      kanal: interaction.channel,
       userId: interaction.user.id,
       userTag: interaction.user.tag,
       guildId: interaction.guildId,
       model,
       yedek: defaultNvidia(),
       soru,
-      baslangic,
     });
   }
 

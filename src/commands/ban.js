@@ -22,7 +22,11 @@ function build(lang) {
       await interaction.guild.members.ban(user.id, { reason });
       await interaction.reply(t(L, 'ban.done', { tag: user.tag, r: reason }));
     } catch {
-      await interaction.reply({ content: t(L, 'ban.err'), ephemeral: true });
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({ content: t(L, 'ban.err'), ephemeral: true }).catch(() => {});
+      } else {
+        await interaction.reply({ content: t(L, 'ban.err'), ephemeral: true }).catch(() => {});
+      }
     }
   }
 

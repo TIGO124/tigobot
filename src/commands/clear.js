@@ -13,11 +13,17 @@ function build(lang) {
   async function execute(interaction) {
     const L = getLang(interaction.guildId);
     const amount = interaction.options.getInteger('adet');
+    const yanitla = (payload) => {
+      if (interaction.replied || interaction.deferred) return interaction.followUp(payload).catch(() => {});
+      return interaction.reply(payload).catch(() => {});
+    };
     try {
-      await interaction.channel.bulkDelete(amount, true);
-      await interaction.reply({ content: t(L, 'clear.done', { n: amount }), ephemeral: true });
+      const silinen = await interaction.channel.bulkDelete(amount, true);
+      // İstenen değil GERÇEKTEN silinen sayı (14+ günlükler atlanır)
+      const n = silinen && typeof silinen.size === 'number' ? silinen.size : amount;
+      await yanitla({ content: t(L, 'clear.done', { n }), ephemeral: true });
     } catch {
-      await interaction.reply({ content: t(L, 'clear.err'), ephemeral: true });
+      await yanitla({ content: t(L, 'clear.err'), ephemeral: true });
     }
   }
 

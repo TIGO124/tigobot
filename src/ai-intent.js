@@ -6,7 +6,7 @@
 // - Sonuç: { op, args } | { eslesme: false } (yönetim değil/sohbet) | hata fırlatır.
 const { sanitize } = require('./sanitize');
 const { acikMi } = require('./local');
-const { effectiveAgent, findModel, isChatEnabled, agentModelleri } = require('./ai-models');
+const { effectiveAgent, isChatEnabled, agentModelleri, allModels, AGENT_NVIDIA_SIRALI } = require('./ai-models');
 const { KATALOG, toolListesi } = require('./ai-actions');
 const { isOpEnabled } = require('./ai-perms');
 
@@ -173,6 +173,29 @@ async function jsonCozumle(base, model, soru, lang, ayar) {
   return { op: j.op, args: duz };
 }
 
+// Ölü/kotalı yedek pas-geçme: 404/410 (yayından kalkmış) ve 429 (kota)
+// alan aday, süresi dolana kadar zincirde atlanır. Böylece her istekte
+// ölü modellere tekrar tekrar çarpılıp zaman kaybedilmez; dirilirse
+// süre bitince otomatik döner.
+const OLU_GECICI_MS = 5 * 60 * 1000; // 429 kotası
+const OLU_KALICI_MS = 60 * 60 * 1000; // 404/410 yayından kalkma
+const oluModeller = new Map(); // ad -> timestamp (ms)
+
+function adayOlumu(ad) {
+  const bitis = oluModeller.get(ad);
+  if (!bitis) return false;
+  if (bitis > Date.now()) return true;
+  oluModeller.delete(ad);
+  return false;
+}
+
+function adayOlduIsaretle(ad, kalici) {
+  try {
+    oluModeller.set(ad, Date.now() + (kalici ? OLU_KALICI_MS : OLU_GECICI_MS));
+    console.log(`AI-YEDEK ${ad} pas geçilecek (${kalici ? '60 dk (ölü model)' : '5 dk (kota)'})`);
+  } catch {}
+}
+
 // Ana giriş: önce native tools, sonuç yoksa JSON yedeği.
 // guildId -> efektif ajan (sunucu seçimi -> global -> 9B).
 async function cozumle(soru, lang, guildId) {
@@ -192,36 +215,76 @@ async function cozumle(soru, lang, guildId) {
   try {
     return await yerelDene(hedef, soru, lang, ayar);
   } catch (yerelHata) {
-    // Yerel ajan patladı (500/OOM, 404, boş cevap, tünel kopuk):
-    // NVIDIA yedek ajan dene (önce kimi-k2, yoksa ilk açık nvidia ajan).
-    const yh = nvidiaHedefiBul();
-    if (!yh) {
+    // Yerel ajan patladı (500/OOM, 404, boş cevap, tünel kopuk / Ollama kapalı):
+    // NVIDIA yedek ajanları SIRAYLA dene. Tek modele bağlı kalınmazdı;
+    // NVIDIA ölü modeli yayından kaldırınca (örn. kimi-k2 -> 410) zincir
+    // sonraki canlı modele geçer, yönetim çalışmaya devam eder.
+    const adaylar = nvidiaHedefListesi();
+    if (!adaylar.length) {
       try { console.log(`AI-YEDEK yok (key/model yok), yerel hata taşınıyor`); } catch {}
       yerelHata.yedekHata = 'denenmedi (NVIDIA key yok veya ajan kapalı)';
       throw yerelHata;
     }
-    try {
-      const n = await nvidiaNativeCozumle(yh, soru, lang, ayar);
-      if (n.op) return { op: n.op, args: n.args, yedek: yh.ad };
-      const j = await nvidiaJsonCozumle(yh, soru, lang, ayar);
-      if (j.op) return { op: j.op, args: j.args, yedek: yh.ad };
-      try { console.log(`AI-YEDEK ${yh.ad} eslesme-yok, yerel hata taşınıyor`); } catch {}
-      yerelHata.yedekHata = `${yh.ad} eşleşme yok`;
-    } catch (e2) {
-      // 401/403 (key sorunu) üstte ajanHata mesajına dönüşür
-      if (/401|403/.test(String((e2 && e2.message) || ''))) throw e2;
-      const ym = String((e2 && e2.message) || e2).slice(0, 200);
-      try { console.log(`AI-YEDEK ${yh.ad} hata: ${ym}`); } catch {}
-      yerelHata.yedekHata = `${yh.ad}: ${ym}`;
-      // Yedek de patladı: orijinal yerel hatayı taşı (mesajlar doğru kalsın)
+    // Yedek turu kısa tutulur: asılan tek model zinciri kilitlemesin.
+    const yedekAyar = { ...ayar, timeoutMs: Math.min(ayar.timeoutMs, 60000) };
+    const hatalar = [];
+    let atlanan = 0;
+    for (const yh of adaylar) {
+      if (adayOlumu(yh.ad)) { atlanan++; continue; }
+      try {
+        const n = await nvidiaNativeCozumle(yh, soru, lang, yedekAyar);
+        if (n.op) { oluModeller.delete(yh.ad); return { op: n.op, args: n.args, yedek: yh.ad }; }
+        const j = await nvidiaJsonCozumle(yh, soru, lang, yedekAyar);
+        if (j.op) { oluModeller.delete(yh.ad); return { op: j.op, args: j.args, yedek: yh.ad }; }
+        try { console.log(`AI-YEDEK ${yh.ad} eslesme-yok, sonrakine geçiliyor`); } catch {}
+        hatalar.push(`${yh.ad}: eşleşme yok`);
+      } catch (e2) {
+        // 401/403 (key sorunu): diğer modelleri denemenin anlamı yok,
+        // üstte ajanHata mesajına dönüşür.
+        if (/401|403/.test(String((e2 && e2.message) || ''))) throw e2;
+        const ym = String((e2 && e2.message) || e2).slice(0, 160);
+        try { console.log(`AI-YEDEK ${yh.ad} hata: ${ym}`); } catch {}
+        hatalar.push(`${yh.ad}: ${ym}`);
+        // 404/410 (model yayından kalkmış) ve 429 (kota) -> bir süre pas geç.
+        // Diğer hatalar (timeout/ağ) geçici sayılır, sadece sonrakine geçilir.
+        if (/AI hatası \((404|410)\)/.test(ym)) adayOlduIsaretle(yh.ad, true);
+        else if (/AI hatası \(429\)/.test(ym)) adayOlduIsaretle(yh.ad, false);
+      }
+    }
+    // Tüm yedekler patladı: orijinal yerel hatayı taşı (mesajlar doğru kalsın),
+    // denenenlerin özeti teknik detay olarak eklenir.
+    if (!hatalar.length && atlanan > 0) {
+      yerelHata.yedekHata = `tüm yedekler yakın zamanda ölü/kotalı görüldü (${atlanan} model pas geçildi), birazdan tekrar dene`;
+    } else {
+      yerelHata.yedekHata = hatalar.join(' | ').slice(0, 300) || '?';
     }
     throw yerelHata;
   }
 }
 
-// Yerel niyet denemesi: native tools -> format:json.
+// Hızlı ön kontrol: Ollama'ya 5 sn'de ulaşılamıyorsa pahalı niyet
+// çağrısını beklemeden yedeğe düş. (Tünel/PC kapalıyken istek,
+// 120 sn'lik timeout'u boydan boya yiyip asılı kalıyordu.)
+// Not: AbortController+setTimeout kullanılır; sinyal, bekleme bitene kadar
+// kökten erişilebilir tutulur (inline AbortSignal.timeout, sinyali tutan
+// olmazsa GC'ye yem olabilir).
+async function yerelHizliKontrol(base) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => { try { ctrl.abort(); } catch {} }, 5000);
+  try {
+    const res = await fetch(`${base}/api/tags`, { signal: ctrl.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Yerel niyet denemesi: önce hızlı kontrol, sonra native tools -> format:json.
 // Eşleşme yoksa { eslesme:false } döner (yedek denenmez); hatada fırlatır.
 async function yerelDene(hedef, soru, lang, ayar) {
+  if (!(await yerelHizliKontrol(hedef.base))) throw yerelUnreachable();
   try {
     const n = await nativeCozumle(hedef.base, hedef.model, soru, lang, ayar);
     if (n.op) return n;
@@ -245,16 +308,19 @@ async function yerelDene(hedef, soru, lang, ayar) {
   }
 }
 
-// NVIDIA yedek ajan hedefi (kullanıcı seçimine dokunmaz, sadece arıza yedeği).
-function nvidiaHedefiBul() {
+// NVIDIA yedek ajan adayları (sıralı liste): AGENT_NVIDIA_SIRALI önceliğiyle,
+// sadece AÇIK nvidia ajanlar. Biri ölürse (404/410) sıradaki denenir.
+// (Kullanıcı seçimine dokunmaz, sadece arıza yedeğidir.)
+function nvidiaHedefListesi() {
   const key = (process.env.NVIDIA_API_KEY || '').trim();
-  if (!key) return null;
-  const kimi = findModel('nvidia-kimi-k2');
-  const sec = (kimi && kimi.agent === true && isChatEnabled(kimi.key))
-    ? kimi
-    : agentModelleri().find(m => m.kind === 'nvidia' && isChatEnabled(m.key));
-  if (!sec) return null;
-  return { yol: 'nvidia', model: sec.model, key, thinkingOff: sec.agentThinkingOff === true, ad: sec.key };
+  if (!key) return [];
+  const acik = agentModelleri().filter(m => m.kind === 'nvidia' && isChatEnabled(m.key));
+  const sira = new Map(AGENT_NVIDIA_SIRALI.map((k, i) => [k, i]));
+  acik.sort((a, b) => (sira.has(a.key) ? sira.get(a.key) : 999) - (sira.has(b.key) ? sira.get(b.key) : 999));
+  return acik.map(sec => ({
+    yol: 'nvidia', model: sec.model, key,
+    thinkingOff: sec.agentThinkingOff === true, ad: sec.key,
+  }));
 }
 
 // NVIDIA native tools yolu (OpenAI-uyumlu).
@@ -331,4 +397,76 @@ async function nvidiaJsonCozumle(hedef, soru, lang, ayar) {
   return { op: j.op, args: duz };
 }
 
-module.exports = { cozumle, argDogrula };
+// Açılış öz-denetimi (erken uyarı): sorun istek anında değil, logda
+// ilk dakikada görünsün. Hiç fırlatmaz; sadece raporlar.
+// - Yerel: /local açık mı, tünele ulaşılıyor mu, ajan modeli Ollama'da var mı?
+// - NVIDIA: key geçerli mi, kayıtlı model ID'leri listede mi
+//   (yayından kalkan model kimi-k2/410 vakası gibi önceden yakalansın)?
+async function baslangicKontrolu() {
+  const notlar = [];
+  // --- Yerel ---
+  try {
+    if (!acikMi()) {
+      notlar.push('YEREL kapalı (/local kapatılmış) -> yönetim hep NVIDIA yedekle çalışır');
+    } else {
+      const base = (process.env.AI_BASE_URL || '').replace(/\/+$/, '');
+      if (!base) {
+        notlar.push('YEREL ADRES YOK (AI_BASE_URL eksik) -> yönetim hep NVIDIA yedekle çalışır');
+      } else {
+        const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) {
+          notlar.push(`YEREL ULAŞILAMIYOR (tags HTTP ${res.status}) -> yönetim NVIDIA yedekle çalışır`);
+        } else {
+          const data = await res.json().catch(() => ({}));
+          const adlar = Array.isArray(data.models) ? data.models.map(m => m.name || m.model).filter(Boolean) : [];
+          let ajan = null;
+          try { ajan = effectiveAgent(null); } catch {}
+          if (ajan && ajan.kind === 'local') {
+            const varMi = adlar.some(a => a === ajan.model || String(a).split(':')[0] === String(ajan.model).split(':')[0]);
+            notlar.push(varMi
+              ? `YEREL OK (${adlar.length} model, ajan ${ajan.model} mevcut)`
+              : `YEREL AJAN EKSİK (${ajan.model} Ollama'da yok! PC'de: ollama pull ${ajan.model})`);
+          } else {
+            notlar.push(`YEREL OK (${adlar.length} model)`);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    notlar.push(`YEREL ULAŞILAMIYOR (${String((e && e.message) || e).slice(0, 80)}) -> yönetim NVIDIA yedekle çalışır`);
+  }
+  // --- NVIDIA ---
+  try {
+    const key = (process.env.NVIDIA_API_KEY || '').trim();
+    if (!key) {
+      notlar.push('NVIDIA KEY YOK -> yerel ölürse yönetim çalışmaz! Railway Variables: NVIDIA_API_KEY');
+    } else {
+      const res = await fetch(`${NVIDIA_BASE}/models`, {
+        headers: { Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.status === 401 || res.status === 403) {
+        notlar.push('NVIDIA KEY GEÇERSİZ (401/403) -> yerel ölürse yönetim çalışmaz!');
+      } else if (!res.ok) {
+        notlar.push(`NVIDIA liste alınamadı (HTTP ${res.status}), yedek zincir istek anında belli olur`);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        const liste = new Set(Array.isArray(data.data) ? data.data.map(m => m.id) : []);
+        const kayitli = allModels().filter(m => m.kind === 'nvidia').map(m => m.model);
+        const kayip = [...new Set(kayitli.filter(id => liste.size && !liste.has(id)))];
+        const acikAjan = agentModelleri().filter(m => m.kind === 'nvidia' && isChatEnabled(m.key)).length;
+        notlar.push(`NVIDIA OK (key geçerli, ${liste.size || '?'} model, ${acikAjan} açık ajan)`);
+        if (kayip.length) notlar.push(`NVIDIA'DA YOK (yayından kalkmış olabilir): ${kayip.join(', ')}`);
+        if (!acikAjan) notlar.push('HİÇ AÇIK NVIDIA AJAN YOK -> yerel ölürse yönetim çalışmaz!');
+      }
+    }
+  } catch (e) {
+    notlar.push(`NVIDIA kontrol edilemedi (${String((e && e.message) || e).slice(0, 80)})`);
+  }
+  try {
+    for (const n of notlar) console.log('AI-KONTROL ' + n);
+  } catch {}
+  return notlar;
+}
+
+module.exports = { cozumle, argDogrula, baslangicKontrolu };

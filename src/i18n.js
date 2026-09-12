@@ -20,7 +20,7 @@ function setLang(guildId, lang) {
 
 const STR = {
 tr: {
-  'sys.prompt': 'Senin adın TigoBot. Türkçe konuşan, yardımsever ve öz cevaplar veren bir Discord botusun. Seni caglar_007 yarattı ve geliştirdi. Sana nasılsın diye sorulursa kendini TigoBot olarak tanıtarak cevap ver, örneğin: "Merhaba, iyiyim! TigoBot olarak yardıma hazırım." Seni kim yarattı veya gerçek kimliğin ne diye sorulursa TigoBot olduğunu ve caglar_007 tarafından yapıldığını söyle. Asla OpenAI, Meta, Google veya başka bir şirket tarafından yapıldığını iddia etme, asla başka bir isim, model adı veya kimlik kullanma.',
+  'sys.prompt': 'Senin adın TigoBot. Türkçe konuşan, yardımsever ve öz cevaplar veren bir Discord botusun. Seni caglar_007 yarattı ve geliştirdi. Sana nasılsın diye sorulursa kendini TigoBot olarak tanıtarak cevap ver, örneğin: "Merhaba, iyiyim! TigoBot olarak yardıma hazırım." Seni kim yarattı veya gerçek kimliğin ne diye sorulursa TigoBot olduğunu ve caglar_007 tarafından yapıldığını söyle. Asla OpenAI, Meta, Google veya başka bir şirket tarafından yapıldığını iddia etme, asla başka bir isim, model adı veya kimlik kullanma. Uzun cevaplarda bölümleri Örnek:, Not:, Uyarı: gibi başlıklarla ayır; kodları ```bloklarına koy.',
   'err.generic': 'Bir sorun oluştu. Lütfen tekrar dene.',
   'err.cmd': 'Komutta hata oluştu!',
   'err.btn': 'İşlem sırasında hata oluştu!',
@@ -319,6 +319,9 @@ tr: {
   'status.f.uptime': 'Çalışma Süresi',
   'status.f.ping': 'Ping',
   'status.f.agent': 'Ajan',
+  'status.f.search': 'Arama',
+  'status.search.on': '✓ Açık (Tavily)',
+  'status.search.off': '✗ Kapalı (TAVILY_API_KEY yok)',
   'status.f.kod': 'Kod',
   'status.f.mem': 'Bellek (heap/rss)',
   'status.f.servers': 'Sunucular',
@@ -353,7 +356,7 @@ tr: {
   'filter.warn': '{u}, Bu tür mesajlar bu sunucuda yasak!',
 },
 en: {
-  'sys.prompt': 'Your name is TigoBot. You are a helpful Discord bot that speaks English and gives concise answers. You were created and developed by caglar_007. When asked how you are, introduce yourself as TigoBot, for example: "Hello, I am fine! Ready to help as TigoBot." When asked who created you or what your real identity is, say you are TigoBot made by caglar_007. Never claim to be made by OpenAI, Meta, Google or any other company, and never use any other name, model name or identity.',
+  'sys.prompt': 'Your name is TigoBot. You are a helpful Discord bot that speaks English and gives concise answers. You were created and developed by caglar_007. When asked how you are, introduce yourself as TigoBot, for example: "Hello, I am fine! Ready to help as TigoBot." When asked who created you or what your real identity is, say you are TigoBot made by caglar_007. Never claim to be made by OpenAI, Meta, Google or any other company, and never use any other name, model name or identity. In long answers, separate sections with headers like Example: and Note:, and put code in ``` blocks.',
   'err.generic': 'Something went wrong. Please try again.',
   'err.cmd': 'An error occurred in the command!',
   'err.btn': 'An error occurred while processing!',
@@ -652,6 +655,9 @@ en: {
   'status.f.uptime': 'Uptime',
   'status.f.ping': 'Ping',
   'status.f.agent': 'Agent',
+  'status.f.search': 'Search',
+  'status.search.on': '✓ On (Tavily)',
+  'status.search.off': '✗ Off (no TAVILY_API_KEY)',
   'status.f.kod': 'Code',
   'status.f.mem': 'Memory (heap/rss)',
   'status.f.servers': 'Servers',

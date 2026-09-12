@@ -119,7 +119,7 @@ async function yonetimAkis(ctx, soru, gonder) {
     } catch (e) {
       const msg = String((e && e.message) || '');
       const { sanitize } = require('./sanitize');
-      const yedekBilgi = sanitize(String((e && e.yedekHata) || '')).slice(0, 120);
+      const yedekBilgi = sanitize(String((e && e.yedekHata) || '')).slice(0, 200);
       if (e && e.code === 'LOCAL_UNREACHABLE' || /LOCAL_UNREACHABLE|fetch failed|timeout/i.test(msg)) {
         iz('yerel-erisilemiyor', ctx, msg);
         await gonder({ content: t(L, 'mg.yerelKapali', { teknik: yedekBilgi || '?' }) }).catch(() => {});
@@ -131,9 +131,13 @@ async function yonetimAkis(ctx, soru, gonder) {
         return true;
       }
       iz('niyet-hata', ctx, msg);
-      // Model PC'de yoksa (404) kullanıcıya net çözüm söyle
-      if (/AI hatası \(404\)|model.*not found|does not exist|not found/i.test(msg)) {
-        await gonder({ content: t(L, 'mg.modelYok') }).catch(() => {});
+      // Model bulunamadı/yayından kalkmışsa (404/410) kullanıcıya net çözüm söyle.
+      // Yerel model eksikse Ollama pull önerilir; NVIDIA modeli ölmüşse
+      // (örn. kimi-k2 -> 410) ajan hatası gösterilir, pull önerilmez.
+      if (/AI hatası \((404|410)\)|model.*not found|does not exist|not found/i.test(msg)) {
+        let ajanNvidia = false;
+        try { ajanNvidia = require('./ai-models').effectiveAgent(ctx.guild.id).kind === 'nvidia'; } catch {}
+        await gonder({ content: t(L, ajanNvidia ? 'mg.ajanHata' : 'mg.modelYok') }).catch(() => {});
         return true;
       }
       // PC'de model patladıysa (500: genelde VRAM/OOM) net çözüm söyle

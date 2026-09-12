@@ -1,10 +1,11 @@
 const { EmbedBuilder } = require('discord.js');
-const { kuyrugaEkle, siraBilgisi, uretimYap, yerelHazirMi } = require('./ai');
-const { sanitize, kullaniciMesaji } = require('./sanitize');
+const { kuyrugaEkle, uretimYap, yerelHazirMi } = require('./ai');
+const { kullaniciMesaji, sanitize } = require('./sanitize');
 const { t, getLang, setLang } = require('./i18n');
 const { detectLang } = require('./langdetect');
-const { getHistory, pushHistory, MAX_TUR } = require('./memory');
+const { pushHistory, gecmisteAra, MAX_TUR } = require('./memory');
 const { addUsage } = require('./quota');
+const { aramaGerekirMi, webAra } = require('./arama');
 
 function durumEmbed(metin, lang) {
   // Model adı bilerek yazılmaz: aktif model sadece owner/panel tarafından bilinir.
@@ -60,8 +61,12 @@ async function kademeliGoster(mesaj, ekGonder, lang, tamMetin) {
   }
 }
 
-// Ortak akış: dil algılama + kuyruk takibi + animasyon + kademeli cevap.
-async function aiAkis({ mesaj, ekGonder, userId, userTag, guildId, model, yedek, soru, baslangic }) {
+// Ortak akış: dil algılama + yazıyor-göstergesi + arama-bağlamı + renkli cevap.
+// "Thinking" animasyon mesajı BİLEREK YOK: animasyon edit'i ile cevap edit'i
+// yarışıp eski "oluşturuluyor…" metni cevabın üstüne yazılıyordu (takılı
+// thinking bug'ı). Yerine Discord'un yerleşik "yazıyor..." göstergesi
+// (sendTyping) kullanılır; arkada mesaj bırakmaz, eskir hale gelmez.
+async function aiAkis({ ilkGonder, ekGonder, kanal, userId, userTag, guildId, model, yedek, soru, ekBaglam = '' }) {
   const taban = getLang(guildId);
   let lang = taban;
   // Kullanıcı varsayılan dilden farklı dilde yazdıysa dile geç (+ sunucuda kalıcı yap)
@@ -69,16 +74,22 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, guildId, model, yedek,
   if (algi && algi !== taban) {
     lang = algi;
     if (guildId) {
-      setLang(guildId, algi);
+      // Kalıcı dil kaydı başarısız olursa (disk dolu/kilitli) sohbet ölmesin
+      try {
+        setLang(guildId, algi);
+      } catch {}
       try {
         const { registerGuildCommands } = require('./schema');
-        const client = mesaj.client;
-        registerGuildCommands(guildId, algi, client).catch(() => {});
+        const client = kanal && kanal.client;
+        if (client) registerGuildCommands(guildId, algi, client).catch(() => {});
       } catch {}
     }
   }
-  // Yerel seçiliyse önden erişim kontrolü: kapalıysa durum/animasyon
-  // en baştan yedek modeli gösterir, cevapla tutarlı olur.
+  // "Yazıyor..." hemen başlar: arama + kuyruk beklemesi boyunca kullanıcı
+  // boşlukta kalmasın (özellikle arama 15 sn'ye kadar sürebilir).
+  const typing = typingBaslat(kanal);
+  let gonderildi = 0;
+  // Yerel seçiliyse önden erişim kontrolü (hangi modelin cevaplayacağı bilgisi)
   let aktifModel = model;
   if (model.kind === 'local') {
     try {
@@ -86,32 +97,29 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, guildId, model, yedek,
       if (!h.hazir) aktifModel = yedek;
     } catch {}
   }
-  const { jobId, sonuc } = kuyrugaEkle(userId, userTag, aktifModel.key, () => {
-    // Sohbet hafızası: önceki turları bağlam olarak gönder
-    const gecmis = getHistory(userId, guildId);
-    return uretimYap(aktifModel, yedek, [...gecmis, { role: 'user', content: soru }], lang);
+  // İnternet gerekiyorsa Tavily'den taze bağlam çek.
+  // Arama patlarsa (key yok/ağ/401/429) cevap aramasız devam eder;
+  // neden Railway loguna düşer, kullanıcıya yansımaz.
+  let ekstraSistem = '';
+  try {
+    if (aramaGerekirMi(soru)) {
+      const not = await webAra(soru).catch((e) => {
+        try { console.error('Arama atlandı:', sanitize((e && e.message) || e)); } catch {}
+        return null;
+      });
+      if (not) ekstraSistem = not;
+    }
+  } catch {}
+  // Soru metni: yanıt-bağlamı (reply referansı) varsa öne eklenir
+  const soruMetni = ekBaglam ? `${ekBaglam}\n\nSoru: ${soru}` : soru;
+  const { sonuc } = kuyrugaEkle(userId, userTag, aktifModel.key, () => {
+    // Sohbet hafızası: alakalı turlar bağlam olarak gönderilir
+    const gecmis = gecmisteAra(userId, guildId, soru);
+    return uretimYap(aktifModel, yedek, [...gecmis, { role: 'user', content: soruMetni }], lang, ekstraSistem);
   });
-  let animI = 1;
-  let sonMetin = baslangic || null;
-  let bitti = false;
-  const guncelle = async () => {
-    try {
-      const b = siraBilgisi(jobId);
-      const metin = !b || b.sira <= 1 ? animMetni(animI++, lang) : kuyrukMetni(b.sira, b.toplam, lang);
-      if (metin !== sonMetin) {
-        sonMetin = metin;
-        await mesaj.edit({ embeds: [durumEmbed(metin, lang)] });
-      }
-    } catch {}
-  };
-  await sleep(700);
-  if (!bitti) await guncelle();
-  const timer = setInterval(async () => { if (!bitti) await guncelle(); }, 2000);
   try {
     const res = await sonuc;
-    bitti = true;
-    clearInterval(timer);
-    // Başarılı cevabı hafızaya yaz (sonraki sorularda bağlam olur)
+    // Başarılı cevabı hafızaya yaz (sonraki sorularda bağlam olur; ham soru saklanır)
     try { pushHistory(userId, guildId, soru, res.text); } catch {}
     // Token kotası: üretimden dönen token kullanımını işle
     try { if (res.usage > 0) addUsage(userId, res.usage); } catch {}
@@ -119,12 +127,112 @@ async function aiAkis({ mesaj, ekGonder, userId, userTag, guildId, model, yedek,
     if (res.note) {
       try { console.log(`AI yedek model devreye girdi (${guildId || 'DM'}/${userTag}): ${res.note}`); } catch {}
     }
-    await kademeliGoster(mesaj, ekGonder, lang, res.text);
+    gonderildi = await renkliGoster(ilkGonder, ekGonder, res.text);
   } catch (e) {
-    bitti = true;
-    clearInterval(timer);
-    await mesaj.edit(kullaniciMesaji(e, lang).slice(0, 2000)).catch(() => {});
+    const hata = kullaniciMesaji(e, lang).slice(0, 2000);
+    try {
+      if (!gonderildi) await ilkGonder(hata);
+      else await ekGonder(hata);
+    } catch {}
+  } finally {
+    clearInterval(typing);
   }
 }
 
-module.exports = { aiAkis, durumEmbed, kuyrukMetni, animMetni, cumlelereBol, kademeliGoster };
+// "Yazıyor..." göstergesi: mesaj bırakmaz, 8 sn'de bir tazelenir.
+function typingBaslat(kanal) {
+  const tik = () => { try { if (kanal && typeof kanal.sendTyping === 'function') kanal.sendTyping().catch(() => {}); } catch {} };
+  tik();
+  return setInterval(tik, 8000);
+}
+
+const RENK = {
+  varsayilan: 0x5865F2, // blurple: normal anlatım
+  ornek: 0x57F287, // yeşil: örnekler
+  kod: 0x9B59B6, // mor: kod blokları
+  uyari: 0xFEE75C, // sarı: uyarı/not
+};
+const MAX_EMBED = 3900;
+
+// Cevabı renkli bloklara ayırır: örnekler yeşil, kod mor, uyarı sarı.
+function bloklaraAyir(text) {
+  const ham = String(text || '');
+  if (!ham.trim()) return [];
+  // 1) Kod çitlerini ayır (içleri bölünmez)
+  const hamParca = ham.split(/(```[\s\S]*?(?:```|$))/g).filter(s => s !== '');
+  const bloklar = [];
+  for (const p of hamParca) {
+    if (p.startsWith('```')) {
+      if (p.replace(/```/g, '').trim()) bloklar.push({ tur: 'kod', metin: p.trim() });
+      continue;
+    }
+    // 2) Örnek/Uyarı satır başlarından böl
+    const isaretli = p.split(/\n(?=(?:örnek|ornek|example|mesela|uyarı|uyari|not|dikkat|warning|note|önemli|onemli|important)\s*[:\-])/i);
+    for (const q of isaretli) {
+      for (const a of q.split(/\n{2,}/)) {
+        const t2 = a.trim();
+        if (t2) bloklar.push({ tur: sinifla(t2), metin: t2 });
+      }
+    }
+  }
+  // 3) Ardışık aynı renkleri birleştir (tek renk cümbüşü olmasın)
+  const birlesik = [];
+  for (const b of bloklar) {
+    const son = birlesik[birlesik.length - 1];
+    if (son && son.tur === b.tur && (son.metin.length + b.metin.length + 2) <= MAX_EMBED) {
+      son.metin += '\n\n' + b.metin;
+    } else if (b.metin.length > MAX_EMBED) {
+      for (const c of cumlelereBol(b.metin, MAX_EMBED)) birlesik.push({ tur: b.tur, metin: c });
+    } else {
+      birlesik.push({ tur: b.tur, metin: b.metin });
+    }
+  }
+  // 4) Güvenlik tavanı: en fazla 10 kutu (fazlası sondan birleşir).
+  // Birleşen kutu limiti aşarsa tekrar bölünür (içerik ASLA kesilmez,
+  // Discord 4096 sınırını send aşamasında da korur).
+  while (birlesik.length > 10) {
+    const son = birlesik.pop();
+    birlesik[birlesik.length - 1].metin += '\n\n' + son.metin;
+  }
+  const duzgun = [];
+  for (const b of birlesik) {
+    if (b.metin.length > MAX_EMBED) {
+      for (const c of cumlelereBol(b.metin, MAX_EMBED)) duzgun.push({ tur: b.tur, metin: c });
+    } else {
+      duzgun.push(b);
+    }
+  }
+  return duzgun.filter(b => b.metin && b.metin.trim());
+}
+
+function sinifla(t2) {
+  if (/^(örnek|ornek|example|mesela|for\s+example)\s*[:\-]/i.test(t2)) return 'ornek';
+  if (/^(uyarı|uyari|not|dikkat|warning|note|önemli|onemli|important)\s*[:\-]/i.test(t2)) return 'uyari';
+  return 'varsayilan';
+}
+
+// Renkli blokları gönderir: ilk blok ilkGonder ile (yanıt/edit),
+// devamı ekGonder ile. Gönderilen kutu sayısını döner.
+async function renkliGoster(ilkGonder, ekGonder, tamMetin) {
+  const bloklar = bloklaraAyir(tamMetin);
+  if (!bloklar.length) {
+    await ilkGonder(String(tamMetin || '').slice(0, 2000));
+    return 1;
+  }
+  let n = 0;
+  for (const b of bloklar) {
+    const embed = new EmbedBuilder()
+      .setDescription(b.metin.slice(0, 4096))
+      .setColor(RENK[b.tur] || RENK.varsayilan)
+      .setTimestamp();
+    if (n === 0) await ilkGonder({ embeds: [embed] });
+    else {
+      await ekGonder({ embeds: [embed] });
+      await sleep(600); // kanal hız limitine takılmamak için
+    }
+    n++;
+  }
+  return n;
+}
+
+module.exports = { aiAkis, durumEmbed, kuyrukMetni, animMetni, cumlelereBol, kademeliGoster, bloklaraAyir, renkliGoster, RENK };

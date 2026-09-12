@@ -137,14 +137,15 @@ function erisilemezMi(e) {
   return /fetch failed|connect|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|timeout/i.test(m);
 }
 
-async function chat(model, messages, lang) {
+async function chat(model, messages, lang, ekstraSistem = '') {
   const L = lang === 'en' ? 'en' : 'tr';
+  const ek = String(ekstraSistem || '').trim();
   if (model.kind === 'nvidia') {
     const key = (process.env.NVIDIA_API_KEY || '').trim();
     if (!key) {
       throw new Error('NVIDIA_API_KEY ayarlı değil. Railway Variables kısmına ekle.');
     }
-    const tum = [{ role: 'system', content: t(L, 'sys.prompt') }, ...messages];
+    const tum = [{ role: 'system', content: t(L, 'sys.prompt') + (ek ? `\n\n${ek}` : '') }, ...messages];
     return callOpenAI(NVIDIA_BASE, key, model.model, tum, 180000);
   }
   const base = (process.env.AI_BASE_URL || '').replace(/\/+$/, '');
@@ -158,7 +159,7 @@ async function chat(model, messages, lang) {
   // /no_think: Qwen3 ailesinde sistem/komut düzeyinde düşünmeyi kapatır.
   // API bayrağı sürüme göre yok sayılsa bile ikinci güvencedir.
   const tum = yerelIcinKirp([
-    { role: 'system', content: `${t(L, 'sys.prompt')} /no_think` },
+    { role: 'system', content: `${t(L, 'sys.prompt')} /no_think` + (ek ? `\n\n${ek}` : '') },
     ...messages,
   ]);
   const yerelCagri = (ms) => callOllamaNative(base, process.env.LOCAL_API_KEY || null, model.model, tum, ms, ayar);
@@ -235,13 +236,13 @@ function queueDepth() {
   return bekleyenler.length + (aktifIs ? 1 : 0);
 }
 
-async function uretimYap(model, yedekModel, messages, lang) {
+async function uretimYap(model, yedekModel, messages, lang, ekstraSistem = '') {
   try {
-    const { text, usage } = await chat(model, messages, lang);
+    const { text, usage } = await chat(model, messages, lang, ekstraSistem);
     return { text, usage, model, note: '' };
   } catch (e) {
     if (e && e.code === 'LOCAL_UNREACHABLE') {
-      const { text, usage } = await chat(yedekModel, messages, lang);
+      const { text, usage } = await chat(yedekModel, messages, lang, ekstraSistem);
       return { text, usage, model: yedekModel, note: '' };
     }
     const msg = String((e && e.message) || '');
@@ -252,11 +253,11 @@ async function uretimYap(model, yedekModel, messages, lang) {
     const yerelBosCevap = model.kind === 'local' && /boş cevap/i.test(msg);
     if (!olumcul && (yerelBosCevap || (model.kind === 'local' && model.key !== yedekModel.key))) {
       try { console.error(`Yerel yedek devreye giriyor (${model.key} -> ${yedekModel.key}): ${msg.slice(0, 160)}`); } catch {}
-      const { text, usage } = await chat(yedekModel, messages, lang);
+      const { text, usage } = await chat(yedekModel, messages, lang, ekstraSistem);
       return { text, usage, model: yedekModel, note: '' };
     }
     if (model.kind === 'nvidia' && !olumcul && model.key !== yedekModel.key) {
-      const { text, usage } = await chat(yedekModel, messages, lang);
+      const { text, usage } = await chat(yedekModel, messages, lang, ekstraSistem);
       return { text, usage, model: yedekModel, note: t(lang, 'ai.fallback.nvidia') };
     }
     throw e;
