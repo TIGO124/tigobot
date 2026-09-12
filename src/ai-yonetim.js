@@ -389,7 +389,13 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
     } catch (e) {
       const msg = String((e && e.message) || '');
       const { sanitize } = require('./sanitize');
-      const yedekBilgi = sanitize(String((e && e.yedekHata) || '')).slice(0, 200);
+      // Tam yedek dökümü loga; kanala sadece ilk satırın özeti (uzun 410
+      // zincirleri kanalı çöplüğe çeviriyordu).
+      const yedekHam = String((e && e.yedekHata) || '');
+      try {
+        if (yedekHam) console.error(`AI-YEDEK özet (${ctx.guild && ctx.guild.id}): ${sanitize(yedekHam).slice(0, 600)}`);
+      } catch {}
+      const yedekBilgi = sanitize(yedekHam.split(' | ')[0]).slice(0, 120);
       if (e && e.code === 'LOCAL_UNREACHABLE' || /LOCAL_UNREACHABLE|fetch failed|timeout/i.test(msg)) {
         iz('yerel-erisilemiyor', ctx, msg);
         try { denemeKaydet(ctx.guild.id, 'yerel-erisilemiyor'); } catch {}

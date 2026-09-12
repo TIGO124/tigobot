@@ -139,9 +139,17 @@ function effectiveModel(guildId) {
   return getGlobalModel();
 }
 
-// Yerel servis kapalıyken cevap verecek yedek: listedeki ilk AÇIK nvidia modeli
+// Yerel servis kapalıyken cevap verecek yedek: ajan sırasındaki ilk AÇIK
+// nvidia modeli (hızlı instruct önce; timeout-yatkın/ölü modeller sonda).
+// Hiç açık nvidia yoksa yerel varsayılan (çağıran LOCAL_UNREACHABLE'i yönetir).
 function defaultNvidia() {
-  return enabledModels().find(m => m.kind === 'nvidia') || defaultModel();
+  try {
+    const sira = new Map(AGENT_NVIDIA_SIRALI.map((k, i) => [k, i]));
+    const acik = enabledModels().filter(m => m.kind === 'nvidia');
+    acik.sort((a, b) => (sira.has(a.key) ? sira.get(a.key) : 999) - (sira.has(b.key) ? sira.get(b.key) : 999));
+    if (acik.length) return acik[0];
+  } catch {}
+  return defaultModel();
 }
 
 // --- AI yönetim (ajan) modeli ---
@@ -150,13 +158,12 @@ function defaultNvidia() {
 // tokensiz -> 60 sn yedek bütçesine sığar). Akıl-yürütmeli/ağır modeller (gpt-oss
 // ailesi, nemotron-super/nano) SONDA: biri ölürse (410) veya asılırsa (timeout)
 // zincir yine de hızlı canlı modelle sonuç verir.
-// Kanıt (2026-09): openai/gpt-oss-120b -> 410 EOL (2026-09-03), gpt-oss-20b ->
-// timeout, kimi-k2 -> 410. Ölü ID'ler listede tutulur ama EN SONDA denenir;
-// 410/429 pas-geçme (60 dk / 5 dk) dirilirse otomatik döndürür.
+// ÖLÜLER (2026-09 kanıtlı, EN SONDA; 410/429 pas-geçme dirilirse döndürür):
+// gpt-oss-120b -> 410 EOL (2026-09-03), kimi-k2 -> 410,
+// llama-3.3-70b (nvidia-llama33) -> 410 EOL (2026-08-26), mixtral -> 410,
+// gpt-oss-20b -> timeout (ölü değil ama yavaş, sonda).
 // Yönetimde KULLANILMAYANLAR (agent:false): deepseek-r1, deepseek-v4, gemma, mini-4b, llama-vision, qwen35-4b.
 const AGENT_NVIDIA_SIRALI = [
-  'nvidia-llama33',
-  'nvidia-mixtral',
   'nvidia-mistral-nemotron',
   'nvidia-qwen-coder',
   'nvidia-llama-nemotron-70b',
@@ -166,6 +173,8 @@ const AGENT_NVIDIA_SIRALI = [
   'nvidia-gpt-oss',
   'nvidia-kimi-k2',
   'nvidia-gpt-oss-120b',
+  'nvidia-llama33',
+  'nvidia-mixtral',
 ];
 
 function agentModelleri() {

@@ -130,6 +130,17 @@ module.exports = {
       if (message.guild && sohbetBul(message.channelId)) {
         const soru = (message.content || '').trim();
         if (!soru) return;
+        // Doğal kapatma isteği ("bu sohbeti kapat") ajana gitmeden doğrudan
+        // işletilir (ajan kapalıyken bile çalışır).
+        if (/sohbeti?\s*kapat|kapat\s*bu\s*sohbet|close\s*(this\s*)?(chat|sohbet)/i.test(soru)
+          && !/kapatma/i.test(soru)) {
+          const { kaldir } = require('../sohbet');
+          try { kaldir(message.channelId); } catch {}
+          try { await message.reply(t(getLang(message.guildId), 'chat.close.done')); } catch {}
+          const ch = message.channel;
+          setTimeout(() => { try { ch.delete('Özel sohbet kapatıldı (kullanıcı isteği)').catch(() => {}); } catch {} }, 1500);
+          return;
+        }
         if (soru.length > MAX_SORU) {
           await message.reply(t(getLang(message.guildId), 'ai.toolong', { max: MAX_SORU }));
           return;
