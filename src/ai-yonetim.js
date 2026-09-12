@@ -90,7 +90,7 @@ async function onaySor(gonder, ctx, op, args) {
 // yerine kısa hata gösterilir).
 // NOT: 'grub' ayrıca yazılır; Türkçe ünsüz yumuşamasıyla grup->grubu/gruba
 // olur ve 'grup' alt-dizgisi TUTMAZ ("grubu".includes("grup") === false)!
-const YONETIM_KELIME = ['kanal', 'kategori', 'grup', 'grub', 'rol', 'rütbe', 'rutbe', 'sustur', 'timeout', 'mute', 'yasakla', 'ban', 'kick', 'uyar', 'warn', 'sayaç', 'sayac', 'counter', 'anket', 'poll', 'oylama', 'hatırlat', 'hatirlat', 'remind', 'oluştur', 'olustur', 'create', 'channel', 'category', 'group', 'role', 'delete', 'clear', 'temizle', 'sil'];
+const YONETIM_KELIME = ['kanal', 'kategori', 'grup', 'grub', 'rol', 'rütbe', 'rutbe', 'sustur', 'timeout', 'mute', 'yasakla', 'ban', 'kick', 'uyar', 'warn', 'sayaç', 'sayac', 'counter', 'anket', 'poll', 'oylama', 'hatırlat', 'hatirlat', 'remind', 'oluştur', 'olustur', 'create', 'channel', 'category', 'group', 'role', 'delete', 'clear', 'temizle', 'sil', 'sohbet', 'chat', 'oda', 'room', 'sıra', 'sira', 'sırasıyla', 'sirasiyla', 'yanlış', 'yanlis', 'düzelt', 'duzelt', 'yapma', 'tekrar', 'olmamış', 'olmamis', 'aç', 'ac'];
 
 // Kısa anahtarlarla çakışan sıradan kelimeler (bana->ban, kontrol->rol):
 // bunlar ayıklanır, kalan metinde arama yapılır.
@@ -127,19 +127,32 @@ function sonDenemeAl(guildId) {
 // Çoklu ad ("a, b ve c aç") ve üst-kategori ("X grubunun altına") destekler.
 const KURAL_MAX_ISLEM = 5;
 const KURAL_STOP = new Set((
-  'yeni bir tane adlı adında isimli lütfen bana bize için icin sunucuya sunucuda ve ile' +
-  ' aç açar oluştur olustur create kur ekle kategori kategorisi kategori grup grubu gruba' +
-  ' kanalı kanali kanal oda odası odayı metin ses sesli yazılı yazili' +
-  ' altına altina içine icine grubun grubunun kategorinin kategorisinin diye' +
-  ' oraya buraya şuraya su bu o new a an the please server open make add'
+  'yeni bir tane adlı adında isimli lütfen lutfen bana bize seni sizi onu bunu şunu' +
+  ' senden benden bizden sizden ondan bundan için icin sunucuya sunucuda ve ile' +
+  ' şimdi simdi şimdide simdide şimdiki hadi bakalım bakim istiyorum istiyorsun istiyoruz istiyom' +
+  ' aç açar oluştur olustur create kur ekle kategori kategorisi kategori grup grubu gruba grubuna' +
+  ' kanalı kanali kanal kanalını kanalına kanalında kanallar kanalları kanallarını kanallarına' +
+  ' channels oda odası odayı odasını metin ses sesli yazılı yazili' +
+  ' altına altina içine icine grubun grubunun kategorinin kategorisinin diye olarak şekilde' +
+  ' açmanı açmayı açmamı yapmanı yapmayı yapmamı kurmanı oluşturmanı olusturmani' +
+  ' açabilir açarmısın açarmisin yapar mısın misin musun müsün mı mi mu mü' +
+ ' de da ki yi yı yu yü ye ya sırasıyla sirasıyla sırayla sirayla sırası sırasıyle tekrar yeniden düzelt duzelt yanlış yanlis yapmamışsın yapmamissin tigobot bot new a an the please server open make add to into under' +
+ ' oraya buraya şuraya su bu o şu'
 ).split(/\s+/).filter(Boolean));
 
-// "X grubunun/kategorisinin altına" kalıbından X'i çıkarır (yoksa null).
-// Öndeki zarflar atılır: "şimdi de o grubun altına" -> "o".
+// "X grubunun/kategorisinin altına" VEYA "X grubuna/kategorisine" kalıbından X'i çıkarır.
+// Öndeki zarflar atılır: "şimdi de o grubun altına" -> "o", "şimdi bu gruba X aç" -> "bu".
 function kuralEbeveynHam(soru) {
-  const m = String(soru || '').match(
+  const ham = String(soru || '');
+  let m = ham.match(
     /([\p{L}\p{N}\s"'“”'-]{1,60}?)\s+(?:grubun|grubunun|kategorinin|kategorisinin|category\s+of)\s+(?:altına|altina|içine|icine|into|under)/iu
   );
+  if (!m) {
+    // "bu gruba X aç" / "UYARILAR grubuna X aç" (hedef belirtmeden grup içi oluşturma)
+    m = ham.match(
+      /([\p{L}\p{N}\s"'“”'-]{1,60}?)\s+(?:gruba|grubuna|kategoriye|kategorisine|group\s+to)\b/iu
+    );
+  }
   if (!m) return null;
   const kelimeler = m[1].trim().split(/\s+/).filter(Boolean);
   if (!kelimeler.length) return null;
@@ -166,20 +179,46 @@ function kuralEbeveynAd(guild, ham) {
 }
 
 // Ad listesi çıkarır: tırnaklı tek ad öncelikli, yoksa virgül/ve/ile bölünür.
+// - "sohbet 3" / "uyarlar_3" gibi harf+sayı ayrımları korunur (sayı atılmaz).
+// - "kanalını açmanı istiyorum", "diye metin kanalı aç" gibi fiil artıkları atılır.
+// - Kullanıcının yazımı korunur (küçültme/slug run aşamasında yapılır).
 function kuralAdlar(soru) {
-  const ham = String(soru || '');
+  let ham = String(soru || '');
+  // Baştaki bot hitabı atılır ("tigobot ...", "<@id> ...")
+  ham = ham.replace(/^\s*(<@!?\d+>\s*|tigobot\b[,.!:\s]*)/iu, '').trim();
   const tirnak = ham.match(/["'“”]([^"'“”]{2,90})["'“”]/u);
   if (tirnak && tirnak[1].trim()) return [tirnak[1].trim()];
-  // Ebeveyn cümleciğini at ("o grubun altına" kısımdaki isim adaya karışmasın)
-  const govde = ham.replace(/^[\s\S]*?(?:altına|altina|içine|icine|into|under)\s+/iu, '');
-  const parcalar = govde.split(/[,;]+|\s+ve\s+|\s+ile\s+/iu).map(s => s.trim()).filter(Boolean);
+  // Ebeveyn cümleciğini at ("o grubun altına" / "bu gruba" kısımdaki isim adaya karışmasın)
+  const govde = ham
+    .replace(/^[\s\S]*?(?:altına|altina|içine|icine|into|under)\s+/iu, '')
+    .replace(/^[\s\S]*?\b(?:gruba|grubuna|kategoriye|kategorisine|group\s+to)\b\s+/iu, '');
+  const parcalar = govde.split(/[,;]+|\s+ve\s+|\s+ile\s+|\s*\+\s*/iu).map(s => s.trim()).filter(Boolean);
   const adlar = [];
-  for (const p of parcalar) {
-    const caps = p.match(/\b[A-ZÇĞİÖŞÜ0-9]{2,}\b/u);
-    if (caps) { adlar.push(caps[0]); continue; }
-    const temiz = p.toLocaleLowerCase('tr').split(/[^\p{L}\p{N}]+/u)
-      .filter(w => w.length >= 2 && !KURAL_STOP.has(w)).slice(0, 3).join(' ');
-    if (temiz) adlar.push(temiz);
+  for (let p of parcalar) {
+    // Sondaki komut artığını kes: "X kanalını açmanı istiyorum" -> "X"
+    p = p.replace(/\s+(?:sırasıyla|sirasıyla|sırayla|sirayla|tekrar|yeniden)\b[\s\S]*$/iu, '')
+      .replace(/\s+(?:metin|ses|sesli|yazılı|yazili)\s+(?:kanalı|kanali|kanal|oda|odası|kanalları|kanallar)\b[\s\S]*$/iu, '')
+      .replace(/\s+(?:kanalı|kanali|kanal|kanalını|kanalına|kanallar|kanalları|kanallarını|oda|odası|odasını|kategorisi|kategorisini|grubu|grubunu)\b[\s\S]*$/iu, '')
+      .replace(/\s+(?:diye|adında|adinda|adlı|adli|isimli|olarak)\b[\s\S]*$/iu, '')
+      .replace(/\s+(?:açmanı|açmayı|açmamı|yapmanı|yapmayı|aç|açın|oluştur|olustur|kur|ekle|yap|create|open|make|add)\b[\s\S]*$/iu, '')
+      .trim();
+    if (!p) continue;
+    // "sohbet 3" -> "sohbet3" (sayı isme yapışır, sıra/numara kaybolmaz).
+    // Alt çizgi/tire kullanıcının isteğidir, korunur ("uyarlar_3" aynı kalır).
+    p = p.replace(/([\p{L}])\s+(\d{1,3})\b/gu, '$1$2');
+    const caps = p.match(/\b[A-ZÇĞİÖŞÜ0-9_]{2,}\b/u);
+    if (caps) { adlar.push(caps[0].replace(/\s+/g, '')); continue; }
+    // Alt çizgi ismin parçasıdır (bölme): sadece harf-dışı (alt çizgi hariç) bölünür.
+    const kelimeler = p.toLocaleLowerCase('tr').split(/[^\p{L}\p{N}_]+/u)
+      .filter(w => (w.length >= 2 || /^\d+$/.test(w)) && !KURAL_STOP.has(w));
+    if (!kelimeler.length) continue;
+    // Sayı önceki kelimeye yapışır ("sohbet","3" -> "sohbet3"), diğerleri boşlukla birleşir.
+    let birlesik = '';
+    for (const w of kelimeler.slice(0, 3)) {
+      if (/^\d+$/.test(w) && birlesik) birlesik += w;
+      else birlesik += (birlesik ? ' ' : '') + w;
+    }
+    if (birlesik) adlar.push(birlesik);
   }
   return [...new Set(adlar)].slice(0, KURAL_MAX_ISLEM + 5);
 }

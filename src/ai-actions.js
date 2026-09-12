@@ -13,6 +13,16 @@ function temizAd(s, max = 100) {
   return clip(String(s || '').trim(), max);
 }
 
+// Discord kanal slug: kullanıcının yazımını korur (Türkçe karakter, alt çizgi korunur).
+// Sadece Discord'un istemedikleri düzeltilir: küçük harf, boşluk->tire, yasak karakter atılır.
+function kanalSlug(s) {
+  let ad = String(s || '').trim().toLocaleLowerCase('tr');
+  ad = ad.replace(/\s+/g, '-');
+  ad = ad.replace(/[^\p{L}\p{N}\-_]/gu, '');
+  ad = ad.replace(/-{2,}/g, '-').replace(/^[-_]+|[-_]+$/g, '');
+  return clip(ad, 100);
+}
+
 // --- Hedef çözümleyiciler (mention / ID / isim) ---
 // ID/mention önce önbellekte aranır, yoksa API'den çekilir
 // (kalabalık sunucularda çevrimdışı üyeler önbellekte olmayabilir).
@@ -133,7 +143,7 @@ const KATALOG = {
     tool: { name: 'kanal_ac', description: 'Sunucuda metin veya ses kanalı açar/oluşturur/ekler. Kullanıcı kanal, oda, chat, sohbet odası derse bu araç. ebeveyn verilirse kanal o kategori/grubun altına açılır.', parameters: { type: 'object', properties: { ad: { type: 'string', description: 'Kanal adı' }, tur: { type: 'string', enum: ['metin', 'ses'], description: 'Kanal türü' }, ebeveyn: { type: 'string', description: 'Üst kategori/grup adı (boşsa en üstte açılır)' } }, required: ['ad', 'tur'] } },
     async run(ctx, a) {
       const L = ctx.lang;
-      const ad = temizAd(a.ad, 90).toLowerCase().replace(/\s+/g, '-');
+      const ad = kanalSlug(a.ad);
       if (!ad) return { ok: false, text: t(L, 'mg.adYok') };
       if (!['metin', 'ses'].includes(a.tur)) return { ok: false, text: t(L, 'mg.turYok') };
       let parent = null;
@@ -155,7 +165,7 @@ const KATALOG = {
   },
   kanal_sil: {
     risk: 'yuksek',
-    tool: { name: 'kanal_sil', description: 'Sunucudaki bir kanalı/odayı SİLER/kaldırır. Sadece kullanıcı açıkça sil/kaldır derse kullan.', parameters: { type: 'object', properties: { ad: { type: 'string', description: 'Silinecek kanal adı' } }, required: ['ad'] } },
+    tool: { name: 'kanal_sil', description: 'Sunucudaki bir metin/ses KANALINI/odayı SİLER/kaldırır. Sadece kullanıcı açıkça kanal/oda sil derse kullan. Kullanıcı grup/kategori/bölüm sil derse BUNU DEĞİL kategori_sil kullan.', parameters: { type: 'object', properties: { ad: { type: 'string', description: 'Silinecek kanal/oda adı' } }, required: ['ad'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const kanal = kanalCoz(ctx.guild, a.ad);
@@ -164,6 +174,25 @@ const KATALOG = {
         const ad = String(kanal.name || '');
         await kanal.delete(`AI yönetim (${ctx.user.tag})`);
         return { ok: true, text: t(L, 'mg.kanalSilindi', { ad }) };
+      } catch { return { ok: false, text: t(L, 'mg.yetkiYok') }; }
+    },
+  },
+  kategori_sil: {
+    risk: 'yuksek',
+    tool: { name: 'kategori_sil', description: 'Sunucudaki bir KATEGORİYİ/grubu/bölümü SİLER/kaldırır. Kullanıcı grup/kategori/bölüm sil derse BU araç (kanal_sil değil). Onay sonrası çalışır; altındaki kanallar silinmez, kategorisiz kalır.', parameters: { type: 'object', properties: { ad: { type: 'string', description: 'Silinecek kategori/grup adı' } }, required: ['ad'] } },
+    async run(ctx, a) {
+      const L = ctx.lang;
+      const kat = kategoriCoz(ctx.guild, a.ad)
+        || kategoriCoz(ctx.guild, temizAd(a.ad, 90).toLocaleLowerCase('tr'));
+      if (!kat) return { ok: false, text: t(L, 'mg.kategoriYok') };
+      let cocuk = 0;
+      try {
+        cocuk = ctx.guild.channels.cache.filter(c => c.parentId === kat.id).size || 0;
+      } catch { cocuk = 0; }
+      try {
+        const ad = String(kat.name || '');
+        await kat.delete(`AI yönetim (${ctx.user.tag})`);
+        return { ok: true, text: t(L, 'mg.kategoriSilindi', { ad }) + (cocuk > 0 ? ' ' + t(L, 'mg.kategoriSilindiNot', { n: cocuk }) : '') };
       } catch { return { ok: false, text: t(L, 'mg.yetkiYok') }; }
     },
   },

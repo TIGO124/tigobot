@@ -146,22 +146,26 @@ function defaultNvidia() {
 
 // --- AI yönetim (ajan) modeli ---
 // FAZ 2: ajan modeli seçilebilir (varsayılan yerel 9B).
-// NVIDIA yedek sırası: ÖNCE canlı olduğu bilinenler.
-// (moonshotai/kimi-k2-instruct NVIDIA'da yayından kalktı -> 410; listede tutulur
-// ama başa alınmaz, dönerse yine kullanılır.)
+// NVIDIA yedek sırası: ÖNCE hızlı instruct modeller (tool-calling güçlü, düşünme
+// tokensiz -> 60 sn yedek bütçesine sığar). Akıl-yürütmeli/ağır modeller (gpt-oss
+// ailesi, nemotron-super/nano) SONDA: biri ölürse (410) veya asılırsa (timeout)
+// zincir yine de hızlı canlı modelle sonuç verir.
+// Kanıt (2026-09): openai/gpt-oss-120b -> 410 EOL (2026-09-03), gpt-oss-20b ->
+// timeout, kimi-k2 -> 410. Ölü ID'ler listede tutulur ama EN SONDA denenir;
+// 410/429 pas-geçme (60 dk / 5 dk) dirilirse otomatik döndürür.
 // Yönetimde KULLANILMAYANLAR (agent:false): deepseek-r1, deepseek-v4, gemma, mini-4b, llama-vision, qwen35-4b.
 const AGENT_NVIDIA_SIRALI = [
-  'nvidia-gpt-oss-120b',
+  'nvidia-llama33',
+  'nvidia-mixtral',
+  'nvidia-mistral-nemotron',
+  'nvidia-qwen-coder',
+  'nvidia-llama-nemotron-70b',
+  'nvidia-lightning',
+  'nvidia-nano-9b',
+  'nvidia-nemotron-super',
   'nvidia-gpt-oss',
   'nvidia-kimi-k2',
-  'nvidia-llama33',
-  'nvidia-mistral-nemotron',
-  'nvidia-mixtral',
-  'nvidia-qwen-coder',
-  'nvidia-lightning',
-  'nvidia-nemotron-super',
-  'nvidia-nano-9b',
-  'nvidia-llama-nemotron-70b',
+  'nvidia-gpt-oss-120b',
 ];
 
 function agentModelleri() {
