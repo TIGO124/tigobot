@@ -306,8 +306,10 @@ function kuralAdlar(soru) {
   const parcalar = govde.split(/[,;]+|\s+ve\s+|\s+ile\s+|\s*\+\s*/iu).map(s => s.trim()).filter(Boolean);
   const adlar = [];
   for (let p of parcalar) {
-    // Sondaki komut artığını kes: "X kanalını açmanı istiyorum" -> "X"
-    p = p.replace(/\s+(?:sırasıyla|sirasıyla|sırayla|sirayla|tekrar|yeniden)\b[\s\S]*$/iu, '')
+    // Sondaki komut artığını kes: "X kanalını açmanı istiyorum" -> "X",
+    // "GENERAL i sil" -> "GENERAL i" (silme fiilleri de artık sayılır).
+    p = p.replace(/\s+(?:silin|sil|kapatın|kapat|kaldırın|kaldır|kaldir|delete|remove|temizle|clear)\b[\s\S]*$/iu, '')
+      .replace(/\s+(?:sırasıyla|sirasıyla|sırayla|sirayla|tekrar|yeniden)\b[\s\S]*$/iu, '')
       .replace(/\s+(?:metin|ses|sesli|yazılı|yazili)\s+(?:kanalı|kanali|kanal|oda|odası|kanalları|kanallar)\b[\s\S]*$/iu, '')
       .replace(/\s+(?:kanalı|kanali|kanal|kanalını|kanalına|kanallar|kanalları|kanallarını|oda|odası|odasını|kategorisi|kategorisini|grubu|grubunu)\b[\s\S]*$/iu, '')
       .replace(/\s+(?:diye|adında|adinda|adlı|adli|isimli|olarak)\b[\s\S]*$/iu, '')
@@ -340,6 +342,23 @@ function kuralNiyetler(soru, guild) {
   // "onu sil onun yerine X aç" düzeltmesi oluşturmadır; silme guard'ına takılmasın.
   // (Ad çıkarımı "yerine" sonrasını kullanır, silinen taraf ajana bile gitmez.)
   const yerineDuzeltme = /yerine|instead/i.test(ham);
+  // NOT: "temizle/clear" (mesaj temizliği = mesaj_sil işi) bilerek YOK;
+  // kanal silmeyle karışmasın diye ajana bırakılır.
+  const silKokusu = /(sil|kapat|kaldır|kaldir|delete|remove)/i.test(ham);
+  // Olumsuz emir ("kanalı silme" = silME!) asla silme yapmaz.
+  if (/\b(silme|kapatma|silmesene|kapatmasana)\b/i.test(ham)) return [];
+  // Silme dalı: deterministik kural (ajan yokken de çalışır).
+  // Mastar kip ("silmek istiyorum") varsayım değil; ajana bırak.
+  if (silKokusu && !yerineDuzeltme) {
+    if (/(silmek|kapatmak|kaldırmak|deleting)/i.test(ham)) return [];
+    const kanalMiS = /(kanal|oda|channel|room|chat|sohbet\s*odas)/i.test(ham);
+    const kategoriMiS = /(kategori|category|categories|grup|grub|group|bölüm|bolum)/i.test(ham);
+    const adlarS = kuralAdlar(soru);
+    if (!adlarS.length) return [];
+    // Kategori sözü geçiyorsa kategori, yoksa kanal (kanal_sil kategoriyi reddeder).
+    if (kategoriMiS && !kanalMiS) return adlarS.map(ad => ({ op: 'kategori_sil', args: { ad } }));
+    return adlarS.map(ad => ({ op: 'kanal_sil', args: { ad } }));
+  }
   // Silme/kapatma kokuyorsa ASLA oluşturma yapma (düzeltme hariç)
   if (!yerineDuzeltme && /(sil|kapat|kaldır|kaldir|delete|remove|temizle|clear)/i.test(ham)) return [];
   // Sayaç/anket/hatırlatıcı "kur" fiiliyle gelir; kanal sanılıp yanlış işlem yapılmasın
@@ -423,17 +442,26 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
       not('yetkisiz');
       return false;
     }
-    // KURAL ÖNCE: açık oluşturma kalıplarında ajana sormadan yap
-    // (deterministik, hızlı, kotasız). Kural tutmazsa ajan dener.
+    // KURAL ÖNCE: açık kalıplarda ajana sormadan yap
+    // (deterministik, hızlı, kotasız, ajan kapalıyken de çalışır).
+    // Kural tutmazsa ajan dener.
     const kurallar = kuralNiyetler(soru, ctx.guild);
     if (kurallar.length) {
       const gecerli = kurallar.filter(k => {
         const g = KATALOG[k.op];
-        return g && g.risk === 'dusuk' && perms.isOpEnabled(k.op, KATALOG);
+        return g && perms.isOpEnabled(k.op, KATALOG);
       });
       if (gecerli.length) {
         const yapilacak = gecerli.slice(0, KURAL_MAX_ISLEM);
         const atlanan = gecerli.length - yapilacak.length;
+        // Yüksek-risk adım (örn. kural-silmeler) varsa TEK onay kartı:
+        // oluşturma da silme de aynı borudan geçer.
+        if (yapilacak.some(k => KATALOG[k.op].risk === 'yuksek' && perms.needsApproval(k.op))) {
+          if (atlanan > 0) iz('kural-atlandi', ctx, String(atlanan));
+          try { denemeKaydet(ctx.guild.id, 'kural-onay', yapilacak.map(k => k.op).join('+')); } catch {}
+          await onaySorPlan(gonder, ctx, yapilacak.map(k => ({ op: k.op, args: k.args })));
+          return true;
+        }
         const metinler = [];
         for (const k of yapilacak) {
           try {
