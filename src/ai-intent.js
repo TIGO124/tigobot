@@ -197,6 +197,7 @@ async function cozumle(soru, lang, guildId) {
     const yh = nvidiaHedefiBul();
     if (!yh) {
       try { console.log(`AI-YEDEK yok (key/model yok), yerel hata taşınıyor`); } catch {}
+      yerelHata.yedekHata = 'denenmedi (NVIDIA key yok veya ajan kapalı)';
       throw yerelHata;
     }
     try {
@@ -205,10 +206,13 @@ async function cozumle(soru, lang, guildId) {
       const j = await nvidiaJsonCozumle(yh, soru, lang, ayar);
       if (j.op) return { op: j.op, args: j.args, yedek: yh.ad };
       try { console.log(`AI-YEDEK ${yh.ad} eslesme-yok, yerel hata taşınıyor`); } catch {}
+      yerelHata.yedekHata = `${yh.ad} eşleşme yok`;
     } catch (e2) {
       // 401/403 (key sorunu) üstte ajanHata mesajına dönüşür
       if (/401|403/.test(String((e2 && e2.message) || ''))) throw e2;
-      try { console.log(`AI-YEDEK ${yh.ad} hata: ${String((e2 && e2.message) || e2).slice(0, 200)}`); } catch {}
+      const ym = String((e2 && e2.message) || e2).slice(0, 200);
+      try { console.log(`AI-YEDEK ${yh.ad} hata: ${ym}`); } catch {}
+      yerelHata.yedekHata = `${yh.ad}: ${ym}`;
       // Yedek de patladı: orijinal yerel hatayı taşı (mesajlar doğru kalsın)
     }
     throw yerelHata;

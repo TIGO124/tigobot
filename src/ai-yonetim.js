@@ -118,9 +118,11 @@ async function yonetimAkis(ctx, soru, gonder) {
       niyet = await cozumle(soru, L, ctx.guild.id);
     } catch (e) {
       const msg = String((e && e.message) || '');
+      const { sanitize } = require('./sanitize');
+      const yedekBilgi = sanitize(String((e && e.yedekHata) || '')).slice(0, 120);
       if (e && e.code === 'LOCAL_UNREACHABLE' || /LOCAL_UNREACHABLE|fetch failed|timeout/i.test(msg)) {
         iz('yerel-erisilemiyor', ctx, msg);
-        await gonder({ content: t(L, 'mg.yerelKapali') }).catch(() => {});
+        await gonder({ content: t(L, 'mg.yerelKapali', { teknik: yedekBilgi || '?' }) }).catch(() => {});
         return true;
       }
       if (/401|403/.test(msg) || /NVIDIA_API_KEY/i.test(msg)) {
@@ -142,7 +144,6 @@ async function yonetimAkis(ctx, soru, gonder) {
       // Soru yönetime benziyorsa sessizliğe gömme, kısa hata göster
       // (teknik detay sanitize edilir; bot özeldir, kanalda görünmesi sorun değil)
       if (yonetimBenzeriMi(soru)) {
-        const { sanitize } = require('./sanitize');
         await gonder({ content: t(L, 'mg.yonetimHata', { teknik: sanitize(msg).slice(0, 120) || '?' }) }).catch(() => {});
         return true;
       }
