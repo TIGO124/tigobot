@@ -113,22 +113,61 @@ function setApproval(op, istiyor) {
   return istiyor;
 }
 
+// Kullanıcı bu sunucuda AI yönetimi kullanabilir mi? (nedeniyle birlikte)
+// /durum içindeki "Yetkin" alanı ve izin kararları bu tek kaynaktan beslenir.
+// Döner: { ok: true } ya da { ok: false, neden: '<mg.neden.* anahtarı>' }.
+function yetkiDurumu(user, member, guild, lang) {
+  const L = lang === 'en' ? 'en' : 'tr';
+  let t = (k, v) => k;
+  try { ({ t } = require('./i18n')); } catch {}
+  if (!guild) return { ok: false, neden: 'dm' };
+  if (!user) return { ok: false, neden: 'yetkisiz' };
+  if (sahipMi(user)) return { ok: true };
+  let gid = null;
+  try { gid = guild.id; } catch { return { ok: false, neden: 'hata' }; }
+  if (!acikMi(gid)) return { ok: false, neden: 'kullanimKapali' };
+  const kim = getKim(gid);
+  if (kim === 'kapali') return { ok: false, neden: 'kimKapali' };
+  try {
+    if (guild.ownerId === user.id) return { ok: true };
+    if (kim === 'yonetici' && member && member.permissions && typeof member.permissions.has === 'function' && member.permissions.has('ManageGuild')) {
+      return { ok: true };
+    }
+  } catch {
+    return { ok: false, neden: 'hata' };
+  }
+  if (kim === 'yonetici') return { ok: false, neden: 'izinsiz' };
+  return { ok: false, neden: 'sahipDegil' };
+}
+
+// /durum'da gösterilen kullanıcıya özel yetki metni.
+function yetkiMetni(user, member, guild, lang) {
+  const L = lang === 'en' ? 'en' : 'tr';
+  const { t } = require('./i18n');
+  const d = yetkiDurumu(user, member, guild, lang);
+  if (d.ok) return t(L, 'mgmt.ben.ok');
+  if (d.neden === 'dm') return t(L, 'mgmt.ben.dm');
+  if (d.neden === 'kullanimKapali') return t(L, 'mgmt.ben.kapali');
+  let metin = t(L, 'mgmt.ben.yok', { neden: t(L, `mg.neden.${d.neden}`) });
+  // Kimlik eşleşmiyorsa sahibine yol göster (ID'ler herkese açık bilgidir).
+  if (d.neden === 'sahipDegil' || d.neden === 'izinsiz') {
+    metin += '\n' + t(L, 'mgmt.ben.ipucu');
+  }
+  return metin;
+}
+
 // Kullanıcı bu sunucuda AI yönetimi kullanabilir mi?
 // user: discord.js User, member: GuildMember (yoksa null), guild: Guild.
 function kullanabilirMiYonetim(user, member, guild) {
-  if (!user || !guild) return false;
-  if (sahipMi(user)) return true;
-  const kim = getKim(guild.id);
-  if (kim === 'kapali') return false;
-  if (!acikMi(guild.id)) return false;
   try {
-    if (guild.ownerId === user.id) return true;
-    if (kim === 'yonetici' && member && member.permissions && member.permissions.has('ManageGuild')) return true;
-  } catch {}
-  return false;
+    return yetkiDurumu(user, member, guild, 'tr').ok;
+  } catch {
+    return false;
+  }
 }
 
 module.exports = {
   KIMLER, stateOku, acikMi, ayarla, getKim, setKim, setGuild, getLogKanal,
   isOpEnabled, setOpEnabled, needsApproval, setApproval, kullanabilirMiYonetim,
+  yetkiDurumu, yetkiMetni,
 };

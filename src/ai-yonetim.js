@@ -125,7 +125,15 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
     if (!ctx.guild) { not('dm'); return false; }
     // Özellik kapalıysa temiz sohbet doğru davranıştır (not YOK).
     if (!perms.acikMi(ctx.guild.id)) { iz('kapali', ctx); return false; }
-    if (!perms.kullanabilirMiYonetim(ctx.user, ctx.member, ctx.guild)) { iz('yetkisiz', ctx); not('yetkisiz'); return false; }
+    if (!perms.kullanabilirMiYonetim(ctx.user, ctx.member, ctx.guild)) {
+      // ID'lerle logla: Railway logundan kimin neden takıldığı anında görünsün
+      // (OWNER_ID eşleşmiyor mu, sunucu sahibi mi değil?).
+      try {
+        iz('yetkisiz', ctx, `uid=${ctx.user && ctx.user.id} owner=${ctx.guild && ctx.guild.ownerId} kim=${perms.getKim(ctx.guild.id)}`);
+      } catch { iz('yetkisiz', ctx); }
+      not('yetkisiz');
+      return false;
+    }
     let niyet = null;
     try {
       niyet = await cozumle(soru, L, ctx.guild.id);

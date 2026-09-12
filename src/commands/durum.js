@@ -24,6 +24,9 @@ function build(lang) {
     const nvidiaKey = Boolean(process.env.NVIDIA_API_KEY);
     let aramaAcik = false;
     try { aramaAcik = require('../arama').aramaAcikMi(); } catch {}
+    // Kullanıcının kendi yönetim yetkisi: ret yerse nedenini burada görür.
+    let yetkiMetin = '?';
+    try { yetkiMetin = require('../ai-perms').yetkiMetni(interaction.user, interaction.member, interaction.guild, L); } catch {}
     const st = getStats(interaction.client);
     // Yerel kapalıysa SEBEBİ yazılır: adres yok mu, tünel mi kapalı, /local mı kapalı?
     let yerelMetin;
@@ -46,6 +49,7 @@ function build(lang) {
         { name: t(L, 'status.f.uptime'), value: st.uptime, inline: true },
         { name: t(L, 'status.f.agent'), value: effectiveAgent(interaction.guildId).key, inline: true },
         { name: t(L, 'status.f.search'), value: aramaAcik ? t(L, 'status.search.on') : t(L, 'status.search.off'), inline: true },
+        { name: t(L, 'status.f.yetki'), value: yetkiMetin, inline: false },
         { name: t(L, 'status.f.kod'), value: st.kod || '?', inline: true },
       )
       .setTimestamp();
