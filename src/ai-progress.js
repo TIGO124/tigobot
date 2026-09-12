@@ -1,7 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { kuyrugaEkle, uretimYap, yerelHazirMi } = require('./ai');
 const { kullaniciMesaji, sanitize } = require('./sanitize');
-const { t, getLang, setLang } = require('./i18n');
+const { t, getLang } = require('./i18n');
 const { detectLang } = require('./langdetect');
 const { pushHistory, gecmisteAra, MAX_TUR } = require('./memory');
 const { addUsage } = require('./quota');
@@ -68,23 +68,10 @@ async function kademeliGoster(mesaj, ekGonder, lang, tamMetin) {
 // (sendTyping) kullanılır; arkada mesaj bırakmaz, eskir hale gelmez.
 async function aiAkis({ ilkGonder, ekGonder, kanal, userId, userTag, guildId, model, yedek, soru, ekBaglam = '', yonetimNotu = '', kotaMuaf = false }) {
   const taban = getLang(guildId);
-  let lang = taban;
-  // Kullanıcı varsayılan dilden farklı dilde yazdıysa dile geç (+ sunucuda kalıcı yap)
+  // Algılanan dil SADECE bu cevaba uygulanır: tek mesaj sunucunun
+  // kalıcı dilini çeviremez (eskiden setLang + komut yeniden kaydı vardı).
   const algi = detectLang(soru);
-  if (algi && algi !== taban) {
-    lang = algi;
-    if (guildId) {
-      // Kalıcı dil kaydı başarısız olursa (disk dolu/kilitli) sohbet ölmesin
-      try {
-        setLang(guildId, algi);
-      } catch {}
-      try {
-        const { registerGuildCommands } = require('./schema');
-        const client = kanal && kanal.client;
-        if (client) registerGuildCommands(guildId, algi, client).catch(() => {});
-      } catch {}
-    }
-  }
+  const lang = (algi && algi !== taban) ? algi : taban;
   // "Yazıyor..." hemen başlar: arama + kuyruk beklemesi boyunca kullanıcı
   // boşlukta kalmasın (özellikle arama 15 sn'ye kadar sürebilir).
   const typing = typingBaslat(kanal);
@@ -124,8 +111,9 @@ async function aiAkis({ ilkGonder, ekGonder, kanal, userId, userTag, guildId, mo
     const res = await sonuc;
     // Başarılı cevabı hafızaya yaz (sonraki sorularda bağlam olur; ham soru saklanır)
     try { pushHistory(userId, guildId, soru, res.text); } catch {}
-    // Token kotası: muaf olmayanların üretim token'ı işlenir (muaflar sayaçsız)
-    try { if (!kotaMuaf && res.usage > 0) addUsage(userId, res.usage); } catch {}
+    // Token kotası: muaf olmayanların her üretimi en az 1 sayılır
+    // (usage dönmeyen yerel yol kotayı bypass etmesin).
+    try { if (!kotaMuaf) addUsage(userId, Math.max(1, Number(res.usage) || 0)); } catch {}
     // Yedek-not kullanıcıya gösterilmez (model kimliği gizli); loga düşer
     if (res.note) {
       try { console.log(`AI yedek model devreye girdi (${guildId || 'DM'}/${userTag}): ${res.note}`); } catch {}
@@ -205,7 +193,15 @@ function bloklaraAyir(text) {
       duzgun.push(b);
     }
   }
-  return duzgun.filter(b => b.metin && b.metin.trim());
+  const temiz = duzgun.filter(b => b.metin && b.metin.trim());
+  // Sert tavan: en fazla 10 ileti (rate-limit/spam koruması; fazlası notla kısalır).
+  if (temiz.length > 10) {
+    const fazla = temiz.length - 10;
+    const tutulan = temiz.slice(0, 10);
+    tutulan[9].metin = tutulan[9].metin.slice(0, 3700) + `\n\n…(+${fazla} bölüm atlandı)`;
+    return tutulan;
+  }
+  return temiz;
 }
 
 function sinifla(t2) {

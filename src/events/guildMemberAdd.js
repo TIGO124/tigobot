@@ -16,6 +16,9 @@ module.exports = {
     }
     const welcomeId = process.env.WELCOME_CHANNEL_ID;
     let channel = welcomeId ? member.guild.channels.cache.get(welcomeId) : null;
+    if (welcomeId && !channel) {
+      try { console.warn(`KARŞILAMA atlandı (${member.guild.name}): WELCOME_CHANNEL_ID bu sunucuda yok.`); } catch {}
+    }
 
     if (!channel) {
       channel = member.guild.channels.cache.find(c =>
@@ -43,11 +46,18 @@ module.exports = {
       await member.send(t(getLang(member.guild.id), 'welcome.dm', { g: member.guild.name }));
     } catch {}
 
-    // Oto-rol (.env içinde AUTO_ROLE_ID varsa)
+    // Oto-rol (.env içinde AUTO_ROLE_ID varsa; ID bu sunucuya ait olmalı)
     if (process.env.AUTO_ROLE_ID) {
       try {
-        await member.roles.add(process.env.AUTO_ROLE_ID);
-      } catch {}
+        const rol = member.guild.roles.cache.get(process.env.AUTO_ROLE_ID);
+        if (!rol) {
+          console.warn(`OTO-ROL atlandı (${member.guild.name}): AUTO_ROLE_ID bu sunucuda yok.`);
+        } else {
+          await member.roles.add(process.env.AUTO_ROLE_ID);
+        }
+      } catch (e) {
+        try { console.warn(`OTO-ROL verilemedi (${member.guild.name}): ${(e && e.message) || e}`); } catch {}
+      }
     }
 
     await updateCounter(member.guild);

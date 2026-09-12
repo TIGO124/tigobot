@@ -7,7 +7,9 @@ const NAMES = { tr: 'sohbet-olustur', en: 'create-chat' };
 function kanalAdi(user) {
   const ham = String((user && user.username) || 'sohbet').toLocaleLowerCase('tr');
   const temiz = ham.replace(/[^a-zçğıöşü0-9-_]/g, '').slice(0, 20) || 'sohbet';
-  return `sohbet-${temiz}`;
+  // Aynı sluga düşen iki kullanıcı ayırt edilebilsin (panel/moderasyon için)
+  const kuyruk = String((user && user.id) || '0000').slice(-4);
+  return `sohbet-${temiz}-${kuyruk}`;
 }
 
 function build(lang) {

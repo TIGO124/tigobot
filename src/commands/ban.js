@@ -16,6 +16,9 @@ function build(lang) {
     const L = getLang(interaction.guildId);
     const user = interaction.options.getUser('kullanici');
     const reason = clip(interaction.options.getString('sebep') || t(L, 'warn.noreason'), 1500);
+    if (!interaction.guild) {
+      return interaction.reply({ content: t(L, 'ban.dm'), ephemeral: true });
+    }
     const member = interaction.guild.members.cache.get(user.id);
     if (member && !member.bannable) return interaction.reply({ content: t(L, 'ban.noperm'), ephemeral: true });
     try {

@@ -22,7 +22,8 @@ const ARAMA_DESEN = [
   /güncel/i, /bugün/i, /son\s*dakika/i, /son\s*gelişme/i, /şu\s*an\s*(ne|kaç|kim|nerede)/i,
   /fiyat|kaç\s*(tl|dolar|euro|lira)|ne\s*kadar/i, /hava\s*(durumu|nasıl|kaç\s*derece)/i,
   /kim\s*kazandı|maç\s*(sonucu|skoru)|skor/i, /dolar|euro|altın|bitcoin|borsa/i,
-  /vizyonda|sinemada|yeni\s*çıkan/i, /\b20(2[4-9])\b/,
+  /vizyonda|sinemada|yeni\s*çıkan/i,
+  // NOT: çıplak yıl (2025) tek başına aramayı tetiklemez ("2025'te doğdum" boşa arardı).
   /current|latest|today'?s|right\s*now/i, /\bnews\b/i, /who\s*won|score/i,
   /price|how\s*much|stock\s*price/i, /weather/i,
 ];

@@ -1,6 +1,11 @@
 require('dotenv').config();
 require('./logger').install();
 require('./guards').installGuards();
+
+// OWNER_ID yoksa erişim kullanıcı-adı yedeğine düşer (taklit riski) — açılışta bağır.
+if (!process.env.OWNER_ID || !/^\d+$/.test(String(process.env.OWNER_ID).trim())) {
+  console.log('UYARI: OWNER_ID yok/geçersiz! Erişim kontrolü kullanıcı adına (caglar_007) düşer, taklit riski var. Railway Variables kısmına OWNER_ID ekle.');
+}
 const fs = require('fs');
 const path = require('path');
 const { Client, Collection, GatewayIntentBits, Events } = require('discord.js');
@@ -26,7 +31,13 @@ client.commands = new Collection();
 
 // Komutları yükle (her dosya build(lang) verir; iki dil de kaydedilir)
 const commandsPath = path.join(__dirname, 'commands');
-for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) {
+let komutDosyalari = [];
+try {
+  komutDosyalari = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
+} catch (e) {
+  console.error(`Komut klasörü okunamadı (${commandsPath}): ${e.message}`);
+}
+for (const file of komutDosyalari) {
   try {
     const mod = require(path.join(commandsPath, file));
     if (!mod.build) {
@@ -45,8 +56,14 @@ for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) 
 
 // Eventleri yükle
 const eventsPath = path.join(__dirname, 'events');
+let eventDosyalari = [];
+try {
+  eventDosyalari = fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'));
+} catch (e) {
+  console.error(`Event klasörü okunamadı (${eventsPath}): ${e.message}`);
+}
 let eventSayi = 0;
-for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
+for (const file of eventDosyalari) {
   try {
     const evt = require(path.join(eventsPath, file));
     if (!evt.name || !evt.execute) {
@@ -74,6 +91,12 @@ client.once(Events.ClientReady, async c => {
     require('./dashboard').start(c);
   } catch (e) {
     console.error('Panel açılamadı:', e.message);
+  }
+  // Kalıcı hatırlatıcıları geri yükle (restart'ta buharlaşmasın)
+  try {
+    require('./ai-actions').restoreHatirlaticilar(c);
+  } catch (e) {
+    console.error('Hatırlatıcılar yüklenemedi:', e.message);
   }
   // Sayaç kanalını 10 dakikada bir tazele
   setInterval(() => {

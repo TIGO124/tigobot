@@ -25,10 +25,13 @@ function build(lang) {
       return interaction.reply({ content: t(L, 'lang.needManage'), ephemeral: true });
     }
     const secim = interaction.options.getString('lang') === 'en' ? 'en' : 'tr';
+    const onceki = getLang(interaction.guildId);
     setLang(interaction.guildId, secim);
     try {
       await registerGuildCommands(interaction.guildId, secim, interaction.client);
     } catch {
+      // Komut basılamazsa dili geri al (lang.json <-> Discord ıraksamasın)
+      try { setLang(interaction.guildId, onceki); } catch {}
       return interaction.reply({ content: t(secim, 'lang.redeployFail'), ephemeral: true });
     }
     await interaction.reply(t(secim, 'lang.ok'));

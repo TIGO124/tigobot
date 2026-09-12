@@ -3,11 +3,39 @@
 // - run() sonucu: { ok:true, text } ya da { ok:false, text } (kullanıcıya gösterilir).
 // - Güvenlik: whitelist dışı op çalışmaz; hiyerarşi/bot/sahip kontrolleri run() içinde.
 // - ctx: { guild, channel, member (isteyen), user, lang, client }.
-const { ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 const { t } = require('./i18n');
 const { clip } = require('./sanitize');
 const { anketEmbed } = require('./commands/anket');
 const { load, save } = require('./store');
+
+// İsteyen kontrolü: bot sahibi / sunucu sahibi her zaman geçer;
+// diğerleri için Discord yetkisi aranır (bot yetkisi yetmez).
+function isteyenBotSahibi(ctx) {
+  try { return require('./owner').sahipMi(ctx && ctx.user); } catch { return false; }
+}
+function isteyenSunucuSahibi(ctx) {
+  try { return Boolean(ctx && ctx.guild && ctx.user && ctx.guild.ownerId === ctx.user.id); } catch { return false; }
+}
+function isteyenIzni(ctx, perm) {
+  if (!ctx || !ctx.guild) return false;
+  if (isteyenBotSahibi(ctx) || isteyenSunucuSahibi(ctx)) return true;
+  try {
+    return Boolean(ctx.member && ctx.member.permissions && typeof ctx.member.permissions.has === 'function' && ctx.member.permissions.has(perm));
+  } catch { return false; }
+}
+// Rol işlemlerinde isteyenin en yüksek rolü hedeften üstte olmalı
+// (yoksa düşük yetkili, bot üzerinden yüksek rol dağıtır).
+function isteyenRolUstu(ctx, rol, L) {
+  if (isteyenBotSahibi(ctx) || isteyenSunucuSahibi(ctx)) return null;
+  try {
+    const ust = ctx.member && ctx.member.roles && ctx.member.roles.highest;
+    if (!ust || ust.comparePositionTo(rol) <= 0) return { ok: false, text: t(L, 'mg.rolHiyerarsi') };
+  } catch {
+    return { ok: false, text: t(L, 'mg.yetkiYok') };
+  }
+  return null;
+}
 
 function temizAd(s, max = 100) {
   return clip(String(s || '').trim(), max);
@@ -46,9 +74,14 @@ async function uyeCoz(guild, str) {
   }
   const k = s.toLowerCase().replace(/^@/, '');
   try {
-    const bul = guild.members.cache.find(m =>
+    // Önce tam eşleşme: "ali" varken "alican"a vurma (includes fallback en son).
+    const tum = [...guild.members.cache.values()];
+    const tam = tum.find(m =>
       (m.user.username || '').toLowerCase() === k ||
-      (m.displayName || '').toLowerCase() === k ||
+      (m.displayName || '').toLowerCase() === k
+    );
+    if (tam) return tam;
+    const bul = guild.members.cache.find(m =>
       (m.user.username || '').toLowerCase().includes(k) ||
       (m.displayName || '').toLowerCase().includes(k)
     );
@@ -69,8 +102,10 @@ function rolCoz(guild, str) {
       if (r) return r;
     }
     const k = s.toLowerCase().replace(/^@/, '');
+    const tam = guild.roles.cache.find(r => r.name.toLowerCase() === k);
+    if (tam) return tam;
     return guild.roles.cache.find(r =>
-      r.name.toLowerCase() === k || r.name.toLowerCase().includes(k)
+      r.name.toLowerCase().includes(k)
     ) || null;
   } catch { return null; }
 }
@@ -88,8 +123,10 @@ function kanalCoz(guild, str) {
       if (c) return c;
     }
     const k = s.toLowerCase().replace(/^#/, '').replace(/\s+/g, '-');
+    const tam = guild.channels.cache.find(c => (c.name || '').toLowerCase() === k);
+    if (tam) return tam;
     return guild.channels.cache.find(c =>
-      (c.name || '').toLowerCase() === k || (c.name || '').toLowerCase().includes(k)
+      (c.name || '').toLowerCase().includes(k)
     ) || null;
   } catch { return null; }
 }
@@ -170,6 +207,11 @@ const KATALOG = {
       const L = ctx.lang;
       const kanal = kanalCoz(ctx.guild, a.ad);
       if (!kanal) return { ok: false, text: t(L, 'mg.kanalYok') };
+      // Kategori, kanal_sil ile silinemez (kategori_sil'e yönlendirir, alt kanallar korunur).
+      try {
+        if (kanal.type === ChannelType.GuildCategory) return { ok: false, text: t(L, 'mg.kanalYok') };
+      } catch {}
+      if (!isteyenIzni(ctx, PermissionFlagsBits.ManageChannels)) return { ok: false, text: t(L, 'mg.yetkiYok') };
       try {
         const ad = String(kanal.name || '');
         await kanal.delete(`AI yönetim (${ctx.user.tag})`);
@@ -185,6 +227,7 @@ const KATALOG = {
       const kat = kategoriCoz(ctx.guild, a.ad)
         || kategoriCoz(ctx.guild, temizAd(a.ad, 90).toLocaleLowerCase('tr'));
       if (!kat) return { ok: false, text: t(L, 'mg.kategoriYok') };
+      if (!isteyenIzni(ctx, PermissionFlagsBits.ManageChannels)) return { ok: false, text: t(L, 'mg.yetkiYok') };
       let cocuk = 0;
       try {
         cocuk = ctx.guild.channels.cache.filter(c => c.parentId === kat.id).size || 0;
@@ -233,6 +276,9 @@ const KATALOG = {
       if (!g.ok) return g;
       const rol = rolCoz(ctx.guild, a.rol);
       if (!rol) return { ok: false, text: t(L, 'mg.rolYok') };
+      if (!isteyenIzni(ctx, PermissionFlagsBits.ManageRoles)) return { ok: false, text: t(L, 'mg.yetkiYok') };
+      const hiyerarsi = isteyenRolUstu(ctx, rol, L);
+      if (hiyerarsi) return hiyerarsi;
       const ben = botUstu(ctx.guild);
       try {
         if (!ben || ben.roles.highest.comparePositionTo(rol) <= 0) return { ok: false, text: t(L, 'mg.rolHiyerarsi') };
@@ -251,6 +297,9 @@ const KATALOG = {
       if (!g.ok) return g;
       const rol = rolCoz(ctx.guild, a.rol);
       if (!rol) return { ok: false, text: t(L, 'mg.rolYok') };
+      if (!isteyenIzni(ctx, PermissionFlagsBits.ManageRoles)) return { ok: false, text: t(L, 'mg.yetkiYok') };
+      const hiyerarsi = isteyenRolUstu(ctx, rol, L);
+      if (hiyerarsi) return hiyerarsi;
       const ben = botUstu(ctx.guild);
       try {
         if (!ben || ben.roles.highest.comparePositionTo(rol) <= 0) return { ok: false, text: t(L, 'mg.rolHiyerarsi') };
@@ -269,6 +318,7 @@ const KATALOG = {
       if (!g.ok) return g;
       const hamSure = parseInt(a.sure, 10);
       if (!Number.isFinite(hamSure) || hamSure < 1) return { ok: false, text: t(L, 'mg.sureYok') };
+      if (!isteyenIzni(ctx, PermissionFlagsBits.ModerateMembers)) return { ok: false, text: t(L, 'mg.yetkiYok') };
       const dk = Math.min(40320, hamSure);
       if (!hedef.moderatable) return { ok: false, text: t(L, 'mg.hiyerarsi') };
       try {
@@ -286,6 +336,7 @@ const KATALOG = {
       const hedef = await uyeCoz(ctx.guild, a.hedef);
       const g = hedefGuvenli(ctx.guild, hedef, L);
       if (!g.ok) return g;
+      if (!isteyenIzni(ctx, PermissionFlagsBits.KickMembers)) return { ok: false, text: t(L, 'mg.yetkiYok') };
       if (!hedef.kickable) return { ok: false, text: t(L, 'mg.hiyerarsi') };
       try {
         const sebep = temizAd(a.sebep || t(L, 'warn.noreason'), 400);
@@ -302,6 +353,7 @@ const KATALOG = {
       const hedef = await uyeCoz(ctx.guild, a.hedef);
       const g = hedefGuvenli(ctx.guild, hedef, L);
       if (!g.ok) return g;
+      if (!isteyenIzni(ctx, PermissionFlagsBits.BanMembers)) return { ok: false, text: t(L, 'mg.yetkiYok') };
       if (!hedef.bannable) return { ok: false, text: t(L, 'mg.hiyerarsi') };
       try {
         const sebep = temizAd(a.sebep || t(L, 'warn.noreason'), 400);
@@ -330,6 +382,7 @@ const KATALOG = {
       const L = ctx.lang;
       const hamSayi = parseInt(a.sayi, 10);
       if (!Number.isFinite(hamSayi) || hamSayi < 1) return { ok: false, text: t(L, 'mg.sayiYok') };
+      if (!isteyenIzni(ctx, PermissionFlagsBits.ManageMessages)) return { ok: false, text: t(L, 'mg.yetkiYok') };
       const sayi = Math.min(100, hamSayi);
       try {
         const silinen = await ctx.channel.bulkDelete(sayi, true);
@@ -393,15 +446,76 @@ const KATALOG = {
       const dk = Math.min(10080, hamDk);
       const mesaj = temizAd(a.mesaj, 1500);
       if (!mesaj) return { ok: false, text: t(L, 'mg.hatirlaticiYok') };
-      const kanal = ctx.channel;
+      // Kalıcı kayıt: restart/deploy'da buharlaşmasın (açılışta restore edilir).
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      const kayit = {
+        guildId: (ctx.guild && ctx.guild.id) || null,
+        channelId: (ctx.channel && ctx.channel.id) || null,
+        userId: (ctx.user && ctx.user.id) || null,
+        userTag: (ctx.user && ctx.user.tag) || null,
+        mesaj, fireAt: Date.now() + dk * 60 * 1000, lang: L,
+      };
+      try {
+        const m = hatirlaticiOku();
+        m[id] = kayit;
+        // Büyüme koruması: en fazla 200 bekleyen
+        const keys = Object.keys(m);
+        if (keys.length > 200) {
+          for (const k of keys.slice(0, keys.length - 200)) delete m[k];
+        }
+        hatirlaticiYaz(m);
+      } catch {}
+      try {
+        const client = ctx.client || (ctx.channel && ctx.channel.client) || null;
+        planlaHatirlatici(client, { id, ...kayit });
+      } catch {}
       const kim = ctx.user;
-      setTimeout(() => {
-        kanal.send(t(L, 'rem.fire', { u: kim, m: mesaj })).catch(() => {});
-      }, dk * 60 * 1000);
       return { ok: true, text: t(L, 'rem.ok', { u: kim, dk, m: mesaj }) };
     },
   },
 };
+
+// --- Kalıcı hatırlatıcılar (restart'a dayanıklı) ---
+const HATIRLATICI_DOSYA = 'hatirlaticilar.json';
+function hatirlaticiOku() {
+  const m = load(HATIRLATICI_DOSYA, {});
+  return (m && typeof m === 'object') ? m : {};
+}
+function hatirlaticiYaz(map) {
+  save(HATIRLATICI_DOSYA, map || {});
+}
+function hatirlaticiSil(id) {
+  try {
+    const m = hatirlaticiOku();
+    if (m && m[id]) { delete m[id]; hatirlaticiYaz(m); }
+  } catch {}
+}
+async function hatirlaticiAtesle(client, kayit) {
+  try { hatirlaticiSil(kayit && kayit.id); } catch {}
+  try {
+    if (!client || !kayit || !kayit.channelId) return;
+    const kanal = client.channels.cache.get(kayit.channelId)
+      || await client.channels.fetch(kayit.channelId).catch(() => null);
+    if (!kanal || typeof kanal.send !== 'function') return;
+    const L = kayit.lang === 'en' ? 'en' : 'tr';
+    await kanal.send(t(L, 'rem.fire', { u: `<@${kayit.userId}>`, m: kayit.mesaj })).catch(() => {});
+  } catch {}
+}
+function planlaHatirlatici(client, kayit) {
+  if (!kayit || !kayit.fireAt) return;
+  const bekle = Math.max(0, kayit.fireAt - Date.now());
+  // setTimeout üst sınırı (~24.8 gün); hatırlatıcı max 7 gün zaten.
+  setTimeout(() => { hatirlaticiAtesle(client, kayit); }, Math.min(bekle, 2147483647));
+}
+// Açılışta çağrılır: dosyadaki bekleyenleri yeniden zamanlar.
+function restoreHatirlaticilar(client) {
+  try {
+    const m = hatirlaticiOku();
+    const keys = Object.keys(m);
+    for (const k of keys) planlaHatirlatici(client, { id: k, ...m[k] });
+    if (keys.length) console.log(`Hatırlatıcı geri yüklendi: ${keys.length}`);
+  } catch {}
+}
 
 // Ollama native tools dizisi (sadece açık işlemler)
 function toolListesi(acikOp) {
@@ -410,4 +524,4 @@ function toolListesi(acikOp) {
     .map(o => ({ type: 'function', function: o.tool }));
 }
 
-module.exports = { KATALOG, toolListesi, uyeCoz, rolCoz, kanalCoz, kategoriCoz, sonKategoriKaydet, sonKategoriAl };
+module.exports = { KATALOG, toolListesi, uyeCoz, rolCoz, kanalCoz, kategoriCoz, sonKategoriKaydet, sonKategoriAl, planlaHatirlatici, restoreHatirlaticilar };

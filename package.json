@@ -7,10 +7,11 @@
     "start": "node src/index.js",
     "deploy": "node src/deploy-commands.js",
     "deploy:https": "node src/deploy-https.js",
-    "clear-global": "node src/clear-global.js"
+    "clear-global": "node src/clear-global.js",
+    "selftest": "node src/selftest.js"
   },
   "engines": {
-    "node": "20.x"
+    "node": ">=20.x"
   },
   "keywords": [],
   "author": "",

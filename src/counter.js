@@ -1,6 +1,11 @@
 const { t, getLang } = require('./i18n');
 const { load, save } = require('./store');
 
+// Discord kanal yeniden adlandırma limiti (~10 dk'da 2): arayı aç,
+// başarısızlığı sessiz yutma (operatör logda görsün).
+const sonAd = new Map(); // guildId -> timestamp
+const MIN_SURE_MS = 10 * 60 * 1000;
+
 function etiket(lang, sayi) {
   return t(lang, 'counter.label', { n: sayi });
 }
@@ -23,7 +28,15 @@ async function updateCounter(guild) {
       return;
     }
     const yeni = etiket(L, guild.memberCount);
-    if (ch.name !== yeni) await ch.setName(yeni);
+    if (ch.name === yeni) return;
+    const son = sonAd.get(guild.id) || 0;
+    if (Date.now() - son < MIN_SURE_MS) return; // limit freni
+    try {
+      await ch.setName(yeni);
+      sonAd.set(guild.id, Date.now());
+    } catch (e) {
+      try { console.warn(`Sayaç adı güncellenemedi (${guild.name}): ${(e && e.message) || e}`); } catch {}
+    }
   } catch {}
 }
 

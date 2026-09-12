@@ -18,9 +18,13 @@ function opAdi(op, lang) {
 }
 
 function bekleyenEkle(op, args, ctx) {
+  // Bellek şişmesin: en fazla 100 bekleyen onay (en eski düşer).
+  try {
+    if (bekleyenler.size >= 100) bekleyenler.delete(bekleyenler.keys().next().value);
+  } catch {}
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const timer = setTimeout(() => { bekleyenler.delete(id); }, ONAY_MS);
-  bekleyenler.set(id, { op, args, userId: ctx.user.id, guildId: ctx.guild.id, channelId: ctx.channel.id, lang: ctx.lang, timer });
+  bekleyenler.set(id, { op, args, userId: ctx.user.id, userTag: ctx.user.tag, guildId: ctx.guild.id, channelId: ctx.channel.id, lang: ctx.lang, timer });
   return id;
 }
 
@@ -33,9 +37,9 @@ function bekleyenAl(id) {
   return b || null;
 }
 
-function denetim(ctx, op, args, sonuc) {
+function denetim(ctx, op, args, sonuc, ekstra) {
   try {
-    console.log(`AI-YONETIM ${ctx.guild.id}/${ctx.user.tag} ${op} ${JSON.stringify(args).slice(0, 300)} -> ${sonuc.ok ? 'OK' : 'HATA'}`);
+    console.log(`AI-YONETIM ${ctx.guild.id}/${ctx.user.tag} ${op} ${JSON.stringify(args).slice(0, 300)} -> ${sonuc.ok ? 'OK' : 'HATA'}${ekstra ? ` (${ekstra})` : ''}`);
   } catch {}
   // Denetim kanalı: sunucu ayarı -> LOG_CHANNEL_ID -> isim araması. Sessiz geçilir.
   try {
@@ -47,7 +51,7 @@ function denetim(ctx, op, args, sonuc) {
       .addFields(
         { name: t(L, 'mg.logIslem'), value: `${opAdi(op, L)} (${op})`, inline: true },
         { name: t(L, 'mg.logSonuc'), value: sonuc.ok ? 'OK' : t(L, 'mg.logHata'), inline: true },
-        { name: t(L, 'mg.logIsteyen'), value: `${ctx.user.tag} (${ctx.user.id})` },
+        { name: t(L, 'mg.logIsteyen'), value: `${ctx.user.tag} (${ctx.user.id})${ekstra ? `\n${ekstra}` : ''}` },
         { name: t(L, 'mg.logParam'), value: ozet },
       )
       .setTimestamp();
@@ -297,6 +301,9 @@ function kuralNiyetler(soru, guild) {
   if (/(sayaç|sayac|counter|anket|poll|oylama|hatırlat|hatirlat|remind)/i.test(ham)) return [];
   // Mastar kip ("açmayı düşünüyorum") varsayım değil; ajana bırak
   if (/(açmak|açmayı|oluşturmak|oluşturmayı|opening)/i.test(ham)) return [];
+  // 'aç' alt-dizgisi tuzağı: kaç/araç/bekle/saç/sıcak/açlık yönetim değildir.
+  // [] dönmek güvenlidir (ajan yedeği devralır, yanlış kanal açılmaz).
+  if (/(kaç|kac|ara[cç]|bekle|sa[cç]|sıcak|sicak|a[cç]lık|ka[cç]ın)/i.test(ham)) return [];
   if (!/(aç|ac|oluştur|olustur|create|open|make|add|kur|ekle)/i.test(ham)) return [];
   const kanalMi = /(kanal|oda|channel|room|chat|sohbet\s*odas)/i.test(ham);
   // 'grub' ayrıca: grup->grubu/gruba yumuşamasında 'grup' tutmaz!

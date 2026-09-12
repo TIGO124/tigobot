@@ -3,10 +3,22 @@ const { load, save } = require('./store');
 const LANGS = ['tr', 'en'];
 
 // Yeni sunucular: guildCreate 'en' kaydeder. Kayıt yoksa (eski sunucu/DM): 'tr'.
+// Mesaj başına disk okumamak için 5 sn'lik bellek önbelleği (setLang yazma-geçişli).
+const langCache = new Map();
+const LANG_TTL_MS = 5000;
 function getLang(guildId) {
   if (!guildId) return 'tr';
+  try {
+    const kayit = langCache.get(guildId);
+    if (kayit && Date.now() - kayit.ts < LANG_TTL_MS) return kayit.v;
+  } catch {}
   const map = load('lang.json', {});
-  return map[guildId] === 'en' ? 'en' : 'tr';
+  const v = map[guildId] === 'en' ? 'en' : 'tr';
+  try {
+    langCache.set(guildId, { v, ts: Date.now() });
+    if (langCache.size > 500) langCache.delete(langCache.keys().next().value);
+  } catch {}
+  return v;
 }
 
 function setLang(guildId, lang) {
@@ -15,6 +27,7 @@ function setLang(guildId, lang) {
   const map = load('lang.json', {});
   map[guildId] = l;
   save('lang.json', map);
+  try { langCache.set(guildId, { v: l, ts: Date.now() }); } catch {}
   return l;
 }
 
@@ -104,6 +117,7 @@ tr: {
   'ban.noperm': 'Bu kişiyi yasaklayamam.',
   'ban.done': '{tag} yasaklandı. Sebep: {r}',
   'ban.err': 'Yasaklama yapılamadı. Yetkilerimi ve rol sıramı kontrol et.',
+  'ban.dm': 'Bu komut sadece sunucularda kullanılır.',
   'dice.desc': 'Zar atar',
   'dice.opt.n': 'Kaç zar (1-10)',
   'dice.opt.sides': 'Zar kaç yüzlü (2-100)',
@@ -131,7 +145,7 @@ tr: {
   'chat.exists': 'Zaten açık bir sohbetin var: {ch}',
   'chat.err': 'Sohbet kanalı açılamadı. Yetkilerimi kontrol et.',
   'chat.dm': 'Bu komut sadece sunucularda kullanılır.',
-  'chat.welcome': '{u} merhaba! Burası sana özel. tigobot demeden yazman yeterli, panelden de takip edilebilir.',
+  'chat.welcome': '{u} merhaba! Burası sana özel. tigobot demeden yazabilirsin.',
   'chat.close.desc': 'Özel sohbet kanalını kapatır (kanal silinir)',
   'chat.close.done': 'Sohbet kapatıldı.',
   'chat.close.none': 'Açık bir özel sohbetin yok.',
@@ -177,6 +191,7 @@ tr: {
   'counter.done': 'Sayaç kuruldu: {ch}',
   'counter.fail': 'Sayaç kurulamadı.',
   'counter.label': 'Toplam Uye: {n}',
+  'counter.dm': 'Bu komut sadece sunucularda kullanılır.',
   'ai.desc': 'Yapay zekaya soru sor (model: /aimodels)',
   'ai.opt': 'Sorun ne?',
   'aim.desc': 'Global AI modelini gösterir veya değiştirir (sadece bot sahibi)',
@@ -470,6 +485,7 @@ en: {
   'ban.noperm': 'Cannot ban this person.',
   'ban.done': '{tag} banned. Reason: {r}',
   'ban.err': 'Could not ban. Check my permissions and role order.',
+  'ban.dm': 'This command can only be used in servers.',
   'dice.desc': 'Rolls dice',
   'dice.opt.n': 'How many dice (1-10)',
   'dice.opt.sides': 'Sides per die (2-100)',
@@ -543,6 +559,7 @@ en: {
   'counter.done': 'Counter set up: {ch}',
   'counter.fail': 'Could not set up counter.',
   'counter.label': 'Total Members: {n}',
+  'counter.dm': 'This command can only be used in servers.',
   'ai.desc': 'Ask the AI a question (model: /aimodels)',
   'ai.opt': 'Your question',
   'aim.desc': 'Shows or changes the global AI model (bot owner only)',
@@ -797,9 +814,15 @@ const JOKES_EN = [
   [{ t: 'Dursun calls Temel.' }, { k: 'Dursun', s: 'Temel, where are you?' }, { k: 'Temel', s: 'At home.' }, { k: 'Dursun', s: 'Then why did you pick up the phone?' }],
 ];
 
+const _eksikUyari = new Set();
 function t(lang, key, vars) {
   const L = lang === 'en' ? 'en' : 'tr';
   let s = (STR[L] && STR[L][key] !== undefined) ? STR[L][key] : (STR.tr[key] !== undefined ? STR.tr[key] : key);
+  // Eksik çeviri sessizce ham key gösteriyordu; bir kez uyar ki deploy'da yakalansın.
+  if (s === key && !_eksikUyari.has(L + ':' + key)) {
+    _eksikUyari.add(L + ':' + key);
+    try { console.warn(`i18n eksik anahtar [${L}]: ${key}`); } catch {}
+  }
   if (typeof s !== 'string' || !vars) return s;
   for (const k of Object.keys(vars)) s = s.split(`{${k}}`).join(String(vars[k]));
   return s;

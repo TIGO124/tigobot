@@ -31,11 +31,21 @@ async function handle(interaction) {
       await interaction.update({ content: t(L, 'mg.islemKapali'), components: [] }).catch(() => {});
       return;
     }
+    // Onay anında işlem kapatılmışsa çalıştırma
+    try {
+      const { isOpEnabled } = require('./ai-perms');
+      if (!isOpEnabled(b.op, KATALOG)) {
+        await interaction.update({ content: t(L, 'mg.islemKapali'), components: [] }).catch(() => {});
+        return;
+      }
+    } catch {}
     const ctx = { guild: interaction.guild, channel: interaction.channel, member: interaction.member, user: interaction.user, lang: b.lang, client: interaction.client };
     const sonuc = await giris.run(ctx, b.args);
     try {
       const { denetim } = require('./ai-yonetim');
-      denetim(ctx, b.op, b.args, sonuc);
+      // Denetimde gerçek isteyen görünsün (onaylayan değil)
+      const asil = { ...ctx, user: { tag: b.userTag || b.userId, id: b.userId } };
+      denetim(asil, b.op, b.args, sonuc, `onaylayan: ${interaction.user.tag}`);
     } catch {}
     await interaction.update({ content: sonuc.text, components: [] }).catch(() => {});
     return;
@@ -74,6 +84,12 @@ async function handle(interaction) {
       poll.counts = poll.counts.map(n => (Number.isFinite(n) && n > 0 ? Math.floor(n) : 0));
     }
     if (!poll.voters || typeof poll.voters !== 'object') poll.voters = {};
+    else {
+      // Bozuk oy kayıtlarını ayıkla (aralık dışı indeks şişmeye yol açar)
+      for (const [uid, v] of Object.entries(poll.voters)) {
+        if (!Number.isInteger(v) || v < 0 || v >= poll.secenekler.length) delete poll.voters[uid];
+      }
+    }
     const onceki = poll.voters[interaction.user.id];
     if (onceki === idx) {
       delete poll.voters[interaction.user.id];

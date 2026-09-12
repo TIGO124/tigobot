@@ -5,9 +5,24 @@ const { load, save } = require('./store');
 
 const DOSYA = 'sohbet.json';
 
+// Mesaj başına disk okumamak için 5 sn'lik bellek önbelleği
+// (kaydet/kaldir yazma-geçişli).
+let _map = null;
+let _ts = 0;
+const MAP_TTL_MS = 5000;
+
 function hepsi() {
+  try {
+    if (_map && Date.now() - _ts < MAP_TTL_MS) return _map;
+  } catch {}
   const map = load(DOSYA, {});
-  return (map && typeof map === 'object') ? map : {};
+  _map = (map && typeof map === 'object') ? map : {};
+  _ts = Date.now();
+  return _map;
+}
+
+function tazele() {
+  _ts = Date.now();
 }
 
 function kaydet(channelId, bilgi) {
@@ -20,6 +35,7 @@ function kaydet(channelId, bilgi) {
     createdAt: (bilgi && bilgi.createdAt) || Date.now(),
   };
   save(DOSYA, map);
+  tazele();
 }
 
 function kaldir(channelId) {
@@ -29,6 +45,7 @@ function kaldir(channelId) {
   if (!map[k]) return false;
   delete map[k];
   save(DOSYA, map);
+  tazele();
   return true;
 }
 

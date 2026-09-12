@@ -34,16 +34,24 @@ function istek(method, pathname, body) {
 
 (async () => {
   try {
+    // Yıkıcı işlem onaysız çalışmasın (yanlış CLIENT_ID ile prod silinmesin).
+    if (!process.argv.includes('--yes')) {
+      console.log('YIKICI İŞLEM: tüm GLOBAL komutlar silinir. Eminsen: node src/clear-global.js --yes');
+      process.exitCode = 2;
+      return;
+    }
     if (!process.env.TOKEN || !process.env.CLIENT_ID) throw new Error('.env içinde TOKEN/CLIENT_ID eksik');
     const once = await istek('GET', `/api/v10/applications/${process.env.CLIENT_ID}/commands`);
     console.log(`Global komut sayısı (önce): ${once.length}`);
     await istek('PUT', `/api/v10/applications/${process.env.CLIENT_ID}/commands`, []);
     const sonra = await istek('GET', `/api/v10/applications/${process.env.CLIENT_ID}/commands`);
     console.log(`Global komut sayısı (sonra): ${sonra.length}`);
-    if (process.env.GUILD_ID) {
-      const guild = await istek('GET', `/api/v10/applications/${process.env.CLIENT_ID}/guilds/${process.env.GUILD_ID}/commands`);
-      console.log(`Sunucu komut sayısı: ${guild.length} (bunlar kalıyor)`);
+    const guildIds = (process.env.GUILD_IDS || process.env.GUILD_ID || '').split(',').map(s => s.trim()).filter(Boolean);
+    for (const gid of guildIds) {
+      const guild = await istek('GET', `/api/v10/applications/${process.env.CLIENT_ID}/guilds/${gid}/commands`);
+      console.log(`Sunucu komut sayısı [${gid}]: ${guild.length} (bunlar kalıyor)`);
     }
+    if (!guildIds.length) console.log('GUILD_IDS tanımlı değil; sunucu komut sayımı atlandı.');
   } catch (e) {
     console.error('Hata:', e.message);
     process.exitCode = 1;

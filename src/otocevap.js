@@ -10,9 +10,19 @@ function normalize(s) {
   return String(s || '').toLowerCase().trim().replace(/\s+/g, ' ').replace(/[?.!,;:]+$/u, '').trim();
 }
 
+// Mesaj başına disk okumamak için 5 sn'lik bellek önbelleği (ekle/kaldir yazma-geçişli).
+let _map = null;
+let _ts = 0;
+const MAP_TTL_MS = 5000;
+
 function hepsiniGetir() {
+  try {
+    if (_map && Date.now() - _ts < MAP_TTL_MS) return _map;
+  } catch {}
   const m = load(DOSYA, {});
-  return m && typeof m === 'object' ? m : {};
+  _map = (m && typeof m === 'object') ? m : {};
+  _ts = Date.now();
+  return _map;
 }
 
 function ekle(trigger, cevap) {
@@ -21,15 +31,18 @@ function ekle(trigger, cevap) {
   const map = hepsiniGetir();
   map[key] = String(cevap || '').slice(0, MAX_CEVAP);
   save(DOSYA, map);
+  _ts = Date.now();
   return true;
 }
 
 function kaldir(trigger) {
-  const key = normalize(trigger);
+  // ekle() ile aynı dilimleme: uzun tetikleyici silinebilsin.
+  const key = normalize(trigger).slice(0, MAX_TETIK);
   const map = hepsiniGetir();
   if (!Object.prototype.hasOwnProperty.call(map, key)) return false;
   delete map[key];
   save(DOSYA, map);
+  _ts = Date.now();
   return true;
 }
 

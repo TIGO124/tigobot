@@ -71,6 +71,44 @@ function json(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
+// POST gövdesi: 1 MB tavan (sınırsız birikim bellek şişirir/DoS olur).
+// Aşılırsa bağlantı kesilir ve null çözülür (çağıran 413 döner).
+const GOVDE_LIMIT = 1024 * 1024;
+function govdeOku(req) {
+  return new Promise(resolve => {
+    let body = '';
+    let bitti = false;
+    const bitir = (v) => { if (!bitti) { bitti = true; resolve(v); } };
+    try {
+      req.on('data', c => {
+        if (bitti) return;
+        body += c;
+        if (body.length > GOVDE_LIMIT) {
+          try { req.destroy(); } catch {}
+          bitir(null);
+        }
+      });
+      req.on('end', () => bitir(body));
+      req.on('error', () => bitir(body));
+    } catch {
+      bitir(null);
+    }
+  });
+}
+
+// Discord mesaj listesini panele sığdırır (yeniden eskiye değil, kronolojik).
+function mesajlariSirala(msgs) {
+  return [...msgs.values()]
+    .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+    .map(m => ({
+      id: m.id,
+      author: (m.author && (m.author.tag || m.author.username)) || '?',
+      bot: Boolean(m.author && m.author.bot),
+      text: String(m.content || '').slice(0, 2000),
+      at: m.createdTimestamp,
+    }));
+}
+
 function start(client) {
   // Railway PORT değişkenine düşer (public domain o porta bağlanır).
   const port = parseInt(process.env.DASHBOARD_PORT || process.env.PORT, 10);
@@ -113,29 +151,33 @@ function start(client) {
               } catch {}
             }
           } catch {}
-          if (!kanal || typeof kanal.isTextBased !== 'function' || !kanal.isTextBased()) {
-            try { sohbet.kaldir(kanalId); } catch {}
-            return json(res, 404, { error: 'kanal yok' });
+          if (kanal && typeof kanal.isTextBased === 'function' && kanal.isTextBased()) {
+            kanal.messages.fetch({ limit }).then(
+              msgs => {
+                try { json(res, 200, mesajlariSirala(msgs)); }
+                catch { json(res, 500, { error: 'okunamadı' }); }
+              },
+              () => json(res, 500, { error: 'okunamadı' })
+            );
+            return;
           }
-          kanal.messages.fetch({ limit }).then(
-            msgs => {
-              try {
-                const out = [...msgs.values()]
-                  .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
-                  .map(m => ({
-                    id: m.id,
-                    author: (m.author && (m.author.tag || m.author.username)) || '?',
-                    bot: Boolean(m.author && m.author.bot),
-                    text: String(m.content || '').slice(0, 2000),
-                    at: m.createdTimestamp,
-                  }));
-                json(res, 200, out);
-              } catch {
-                json(res, 500, { error: 'okunamadı' });
+          // Cache'de yoksa API'den dene: restart sonrası boş cache
+          // sahte 404 üretip gerçek kaydı silmesin.
+          (async () => {
+            try {
+              for (const g of client.guilds.cache.values()) {
+                let c = null;
+                try { c = await g.channels.fetch(kanalId).catch(() => null); } catch {}
+                if (c && typeof c.isTextBased === 'function' && c.isTextBased()) {
+                  const msgs = await c.messages.fetch({ limit }).catch(() => null);
+                  if (!msgs) return json(res, 500, { error: 'okunamadı' });
+                  return json(res, 200, mesajlariSirala(msgs));
+                }
               }
-            },
-            () => json(res, 500, { error: 'okunamadı' })
-          );
+            } catch {}
+            try { sohbet.kaldir(kanalId); } catch {}
+            try { json(res, 404, { error: 'kanal yok' }); } catch {}
+          })();
           return;
         }
         try {
@@ -178,9 +220,8 @@ function start(client) {
       }
       if (req.method === 'POST' && url.pathname === '/api/models') {
         if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
-        let body = '';
-        req.on('data', c => { body += c; });
-        req.on('end', () => {
+        govdeOku(req).then(body => {
+          if (body === null) return json(res, 413, { error: 'gövde çok büyük' });
           try {
             const { type, key, enabled, guildId } = JSON.parse(body || '{}');
             if (type === 'img') {
@@ -242,9 +283,8 @@ function start(client) {
       }
       if (req.method === 'POST' && url.pathname === '/api/aimanage') {
         if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
-        let body = '';
-        req.on('data', c => { body += c; });
-        req.on('end', () => {
+        govdeOku(req).then(body => {
+          if (body === null) return json(res, 413, { error: 'gövde çok büyük' });
           try {
             const p = JSON.parse(body || '{}');
             if (typeof p.acik === 'boolean') perms.ayarla(p.acik);
@@ -307,9 +347,8 @@ function start(client) {
       }
       if (req.method === 'POST' && url.pathname === '/api/power') {
         if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
-        let body = '';
-        req.on('data', c => { body += c; });
-        req.on('end', async () => {
+        govdeOku(req).then(async body => {
+          if (body === null) return json(res, 413, { error: 'gövde çok büyük' });
           try {
             const action = (JSON.parse(body || '{}').action || '').toLowerCase();
             if (action === 'stop') {
@@ -342,9 +381,8 @@ function start(client) {
       }
       if (req.method === 'POST' && url.pathname === '/api/local') {
         if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
-        let body = '';
-        req.on('data', c => { body += c; });
-        req.on('end', () => {
+        govdeOku(req).then(body => {
+          if (body === null) return json(res, 413, { error: 'gövde çok büyük' });
           try {
             const on = JSON.parse(body || '{}').on;
             if (on === true) ayarla(true);

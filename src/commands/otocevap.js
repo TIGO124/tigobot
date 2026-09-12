@@ -31,7 +31,7 @@ function build(lang) {
       const map = hepsiniGetir();
       const keys = Object.keys(map);
       if (!keys.length) return interaction.reply({ content: t(L, 'oto.empty'), ephemeral: true });
-      const rows = keys.slice(0, 20).map(k => `• "${k}" → ${map[k].slice(0, 80)}`).join('\n');
+      const rows = keys.slice(0, 20).map(k => `• "${k}" → ${String(map[k]).slice(0, 80)}`).join('\n');
       const devam = keys.length > 20 ? `\n…(+${keys.length - 20})` : '';
       return interaction.reply({ content: t(L, 'oto.list', { n: keys.length, rows: rows + devam }), ephemeral: true });
     }

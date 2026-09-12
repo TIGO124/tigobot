@@ -8,9 +8,21 @@ const CODE_VERSION = 10;
 function buildGuildCommands(lang) {
   const out = [];
   const dir = path.join(__dirname, 'commands');
-  for (const file of fs.readdirSync(dir).filter(f => f.endsWith('.js'))) {
-    const mod = require(path.join(dir, file));
-    if (mod.build) out.push(mod.build(lang).data.toJSON());
+  let dosyalar = [];
+  try {
+    dosyalar = fs.readdirSync(dir).filter(f => f.endsWith('.js'));
+  } catch (e) {
+    throw new Error(`komut klasörü okunamadı: ${e.message}`);
+  }
+  for (const file of dosyalar) {
+    // Tek bozuk komut tüm deploy'u patlatmasın (atlanan logda görünür).
+    try {
+      const mod = require(path.join(dir, file));
+      if (mod.build) out.push(mod.build(lang).data.toJSON());
+      else console.error(`Şema atlandı (${file}): build eksik`);
+    } catch (e) {
+      console.error(`Şema atlandı (${file}): ${e.message}`);
+    }
   }
   return out;
 }

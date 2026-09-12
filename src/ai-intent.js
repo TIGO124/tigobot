@@ -110,7 +110,7 @@ async function nativeCozumle(base, model, soru, lang, ayar) {
       model,
       messages: [
         { role: 'system', content: sistemDili(lang) },
-        { role: 'user', content: String(soru).slice(0, 1000) },
+        { role: 'user', content: String(soru).slice(0, 2000) },
       ],
       stream: false,
       think: false,
@@ -149,7 +149,7 @@ async function jsonCozumle(base, model, soru, lang, ayar) {
       model,
       messages: [
         { role: 'system', content: sistemDili(lang) + ` Yönetim isteğiyse SADECE şu JSON'u yaz: {"op":"<${sema}>","args":{...}}. Yönetim değilse SADECE şunu yaz: {"op":"sohbet"}. Başka hiçbir şey yazma. /no_think` },
-        { role: 'user', content: String(soru).slice(0, 1000) },
+        { role: 'user', content: String(soru).slice(0, 2000) },
       ],
       stream: false,
       think: false,
@@ -202,15 +202,53 @@ async function cozumle(soru, lang, guildId) {
   const hedef = ajanHedef(guildId || null);
   const ayar = intentAyar();
   if (hedef.yol === 'nvidia') {
-    try {
-      const n = await nvidiaNativeCozumle(hedef, soru, lang, ayar);
-      if (n.op) return n;
-    } catch (e) {
-      const msg = String((e && e.message) || '');
-      if (/401|403/.test(msg)) throw e;
-      // Diğer hatalarda JSON yedeğini dene
+    // Seçili ajan önce, sonra diğer açık ajanlar (ölü/kotalı pas geçilir).
+    // Eskiden tek modele 2× tam timeout çarpıp yönetim tamamen ölüyordu.
+    const yedekAyar = { ...ayar, timeoutMs: Math.min(ayar.timeoutMs, 60000) };
+    const dene = async (h) => {
+      try {
+        const n = await nvidiaNativeCozumle(h, soru, lang, yedekAyar);
+        if (n.op) return n;
+      } catch (e) {
+        if (/401|403/.test(String((e && e.message) || ''))) throw e;
+        // Diğer hatalarda JSON yedeği denenir
+      }
+      return nvidiaJsonCozumle(h, soru, lang, yedekAyar);
+    };
+    const adaylar = [{ ...hedef, ad: '(seçili)' }, ...nvidiaHedefListesi().filter(c => c.model !== hedef.model)];
+    const hatalar = [];
+    let hataSayisi = 0;
+    let atlanan = 0;
+    for (const h of adaylar) {
+      const secili = h.ad === '(seçili)';
+      if (!secili && adayOlumu(h.ad)) { atlanan++; continue; }
+      try {
+        const n = await dene(h);
+        if (n.op) {
+          if (!secili) {
+            try { oluModeller.delete(h.ad); } catch {}
+            return { op: n.op, args: n.args, yedek: h.ad };
+          }
+          return n;
+        }
+        hatalar.push(`${secili ? hedef.model : h.ad}: eşleşme yok`);
+      } catch (e2) {
+        if (/401|403/.test(String((e2 && e2.message) || ''))) throw e2;
+        hataSayisi++;
+        const ym = String((e2 && e2.message) || e2).slice(0, 160);
+        try { console.log(`AI-YEDEK ${secili ? hedef.model : h.ad} hata: ${ym}`); } catch {}
+        hatalar.push(`${secili ? hedef.model : h.ad}: ${ym}`);
+        if (!secili) {
+          if (/AI hatası \((404|410)\)/.test(ym)) adayOlduIsaretle(h.ad, true);
+          else if (/AI hatası \(429\)/.test(ym)) adayOlduIsaretle(h.ad, false);
+        }
+      }
     }
-    return nvidiaJsonCozumle(hedef, soru, lang, ayar);
+    // Hepsi "yönetim değil" dediyse hata değil eşleşme-yoktur (temiz sohbet).
+    if (hataSayisi === 0) return { eslesme: false };
+    const err = new Error(hatalar.join(' | ').slice(0, 300) || 'ajan hatası');
+    err.yedekHata = hatalar.join(' | ').slice(0, 300);
+    throw err;
   }
   try {
     return await yerelDene(hedef, soru, lang, ayar);
@@ -337,7 +375,7 @@ async function nvidiaNativeCozumle(hedef, soru, lang, ayar) {
     model: hedef.model,
     messages: [
       { role: 'system', content: sistemDili(lang) },
-      { role: 'user', content: String(soru).slice(0, 1000) },
+      { role: 'user', content: String(soru).slice(0, 2000) },
     ],
     temperature: 0.2,
     // Akıl-yürütmeli modeller (gpt-oss vb.) düşünme token'ını buradan yer;
@@ -378,7 +416,7 @@ async function nvidiaJsonCozumle(hedef, soru, lang, ayar) {
     model: hedef.model,
     messages: [
       { role: 'system', content: sistemDili(lang) + ` Yönetim isteğiyse SADECE şu JSON'u yaz: {"op":"<${opAdlari}>","args":{...}}. Yönetim değilse SADECE şunu yaz: {"op":"sohbet"}. Başka hiçbir şey yazma.` },
-      { role: 'user', content: String(soru).slice(0, 1000) },
+      { role: 'user', content: String(soru).slice(0, 2000) },
     ],
     temperature: 0.1,
     max_tokens: 512,

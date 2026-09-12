@@ -13,10 +13,15 @@ function build(lang) {
 
   async function execute(interaction) {
     const L = getLang(interaction.guildId);
+    if (!interaction.guild) {
+      return interaction.reply({ content: t(L, 'counter.dm'), ephemeral: true });
+    }
     const map = load('counter.json', {});
     const eski = map[interaction.guildId];
     if (eski) {
-      const ch = interaction.guild.channels.cache.get(eski);
+      // Restart sonrası cache boş olabilir: önce cache, sonra API'den dene.
+      const ch = interaction.guild.channels.cache.get(eski)
+        || await interaction.guild.channels.fetch(eski).catch(() => null);
       if (ch) return interaction.reply({ content: t(L, 'counter.exists', { ch }), ephemeral: true });
     }
     try {

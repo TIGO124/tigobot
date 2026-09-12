@@ -4,10 +4,10 @@ require('dotenv').config();
 const { REST, Routes } = require('discord.js');
 const { buildGuildCommands } = require('./schema');
 
-const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-
 (async () => {
   try {
+    if (!process.env.TOKEN || !process.env.CLIENT_ID) throw new Error('.env içinde TOKEN/CLIENT_ID eksik');
+    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
     const ids = (process.env.GUILD_IDS || process.env.GUILD_ID || '').split(',').map(s => s.trim()).filter(Boolean);
     const eslesme = {};
     for (const parca of (process.env.GUILD_LANGS || '').split(',').map(s => s.trim()).filter(Boolean)) {
@@ -29,5 +29,6 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
     }
   } catch (e) {
     console.error('Deploy hatası:', e.message);
+    process.exitCode = 1;
   }
 })();

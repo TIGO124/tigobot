@@ -15,7 +15,17 @@ function load(file, fallback) {
     const p = path.join(dir, file);
     if (!fs.existsSync(p)) return fallback;
     return JSON.parse(fs.readFileSync(p, 'utf8'));
-  } catch {
+  } catch (e) {
+    // Bozuk JSON sessiz fallback'e düşerse sonraki save() dosyayı ezer
+    // (güvenlik dosyalarında yetki sıfırlanması demek). Bozuğu yedekle + uyar.
+    try {
+      const p = path.join(dir, file);
+      if (fs.existsSync(p)) {
+        const yedek = `${p}.bozuk-${Date.now()}`;
+        fs.copyFileSync(p, yedek);
+        console.warn(`BOZUK VERİ: ${file} okunamadı, ${path.basename(yedek)} olarak yedeklendi, varsayılan kullanılıyor.`);
+      }
+    } catch {}
     return fallback;
   }
 }

@@ -6,9 +6,17 @@ function liste(guildId) {
   return Array.isArray(map[guildId]) ? map[guildId] : [];
 }
 
-// Bot sahibi (OWNER_ID) her sunucuda muaf.
+// Bot sahibi (OWNER_ID + ALLOWED_IDS) her sunucuda muaf.
+// owner.js'teki username-fallback burada bilerek YOK: ID'siz muafiyet verilmez.
 function botSahibiMi(userId) {
-  return Boolean(process.env.OWNER_ID) && userId === process.env.OWNER_ID;
+  if (!userId) return false;
+  if (process.env.OWNER_ID && userId === String(process.env.OWNER_ID).trim()) return true;
+  try {
+    const extra = String(process.env.ALLOWED_IDS || '').split(',').map(s => s.trim()).filter(s => /^\d{10,}$/.test(s));
+    return extra.includes(String(userId));
+  } catch {
+    return false;
+  }
 }
 
 // Sunucu sahibi her zaman muaf; listedekiler de muaf.

@@ -8,8 +8,13 @@ const EN_KELIME = new Set(('the be to of and a in that have it for not on with h
 function detectLang(text) {
   if (!text || typeof text !== 'string') return null;
   if (TR_HARF.test(text)) return 'tr';
-  const kelimeler = text.toLocaleLowerCase('tr').split(/[^\p{L}]+/u).filter(w => w.length > 1);
-  if (!kelimeler.length) return null;
+  // 'tr' küçültme I->ı yapar (WILL->wıll), 'en' ise ı->i bozar;
+  // iki form da taranır, hangisi tutarsa o sayılır.
+  const kelimeler = new Set();
+  for (const f of [text.toLocaleLowerCase('tr'), text.toLocaleLowerCase('en')]) {
+    for (const w of f.split(/[^\p{L}]+/u)) if (w.length > 1) kelimeler.add(w);
+  }
+  if (!kelimeler.size) return null;
   let tr = 0, en = 0;
   for (const w of kelimeler) {
     if (TR_KELIME.has(w)) tr++;
