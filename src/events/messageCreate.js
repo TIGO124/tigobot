@@ -5,7 +5,7 @@ const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
 const { guvenilirMi } = require('../trust');
 const { t, getLang } = require('../i18n');
 const { aiAkis } = require('../ai-progress');
-const { isBlocked, blockRemainingMs } = require('../quota');
+const { isBlocked, blockRemainingMs, muafMi } = require('../quota');
 const { bul: otocevapBul } = require('../otocevap');
 const { clip } = require('../sanitize');
 const { kullanabilirMi } = require('../owner');
@@ -31,8 +31,9 @@ async function handleMention(message) {
   }
   const sahipMi = message.guild?.ownerId === message.author.id;
   const guvenilir = guvenilirMi(message.guildId, message.author.id, sahipMi);
-  // Token kotası: blokluysa güvenilir kullanıcı bile kullanamaz
-  if (isBlocked(message.author.id)) {
+  // Token kotası: SADECE muaf olmayanlara işler (sahip/güvenilir takılmaz).
+  const kotaMuaf = muafMi(message.author, message.guildId, sahipMi);
+  if (!kotaMuaf && isBlocked(message.author.id)) {
     const saat = Math.max(1, Math.ceil(blockRemainingMs(message.author.id) / 3600000));
     await message.reply(t(L0, 'quota.blocked', { h: saat }));
     return true;
@@ -84,6 +85,7 @@ async function handleMention(message) {
     soru,
     ekBaglam,
     yonetimNotu,
+    kotaMuaf,
   });
   return true;
 }

@@ -4,7 +4,7 @@ const { effectiveModel, defaultNvidia } = require('../ai-models');
 const { cooldownLeft, markCooldown, MAX_SORU } = require('../ai');
 const { guvenilirMi } = require('../trust');
 const { aiAkis } = require('../ai-progress');
-const { isBlocked, blockRemainingMs } = require('../quota');
+const { isBlocked, blockRemainingMs, muafMi } = require('../quota');
 
 const NAMES = { tr: 'ai', en: 'ai' };
 
@@ -22,8 +22,9 @@ function build(lang) {
     }
     const sahipMi = interaction.guild?.ownerId === interaction.user.id;
     const guvenilir = guvenilirMi(interaction.guildId, interaction.user.id, sahipMi);
-    // Token kotası: blokluysa güvenilir kullanıcı bile kullanamaz (kotayı aşan kullanıcı)
-    if (isBlocked(interaction.user.id)) {
+    // Token kotası: SADECE muaf olmayanlara işler (sahip/güvenilir takılmaz).
+    const kotaMuaf = muafMi(interaction.user, interaction.guildId, sahipMi);
+    if (!kotaMuaf && isBlocked(interaction.user.id)) {
       const saat = Math.max(1, Math.ceil(blockRemainingMs(interaction.user.id) / 3600000));
       return interaction.reply({ content: t(L, 'quota.blocked', { h: saat }), ephemeral: true });
     }
@@ -77,6 +78,7 @@ function build(lang) {
       yedek: defaultNvidia(),
       soru,
       yonetimNotu,
+      kotaMuaf,
     });
   }
 

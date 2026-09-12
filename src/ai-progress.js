@@ -66,7 +66,7 @@ async function kademeliGoster(mesaj, ekGonder, lang, tamMetin) {
 // yarışıp eski "oluşturuluyor…" metni cevabın üstüne yazılıyordu (takılı
 // thinking bug'ı). Yerine Discord'un yerleşik "yazıyor..." göstergesi
 // (sendTyping) kullanılır; arkada mesaj bırakmaz, eskir hale gelmez.
-async function aiAkis({ ilkGonder, ekGonder, kanal, userId, userTag, guildId, model, yedek, soru, ekBaglam = '', yonetimNotu = '' }) {
+async function aiAkis({ ilkGonder, ekGonder, kanal, userId, userTag, guildId, model, yedek, soru, ekBaglam = '', yonetimNotu = '', kotaMuaf = false }) {
   const taban = getLang(guildId);
   let lang = taban;
   // Kullanıcı varsayılan dilden farklı dilde yazdıysa dile geç (+ sunucuda kalıcı yap)
@@ -124,8 +124,8 @@ async function aiAkis({ ilkGonder, ekGonder, kanal, userId, userTag, guildId, mo
     const res = await sonuc;
     // Başarılı cevabı hafızaya yaz (sonraki sorularda bağlam olur; ham soru saklanır)
     try { pushHistory(userId, guildId, soru, res.text); } catch {}
-    // Token kotası: üretimden dönen token kullanımını işle
-    try { if (res.usage > 0) addUsage(userId, res.usage); } catch {}
+    // Token kotası: muaf olmayanların üretim token'ı işlenir (muaflar sayaçsız)
+    try { if (!kotaMuaf && res.usage > 0) addUsage(userId, res.usage); } catch {}
     // Yedek-not kullanıcıya gösterilmez (model kimliği gizli); loga düşer
     if (res.note) {
       try { console.log(`AI yedek model devreye girdi (${guildId || 'DM'}/${userTag}): ${res.note}`); } catch {}

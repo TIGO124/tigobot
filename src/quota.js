@@ -74,4 +74,18 @@ function addUsage(userId, tokens) {
   return { tokens: toplam, blocked: isBlocked(userId), blockedUntil };
 }
 
-module.exports = { isBlocked, remaining, blockRemainingMs, addUsage, reset, limit, blockMs };
+// Kota muafiyeti: bot sahibi + sunucu sahibi + trust listesindakiler
+// token kotasına TAKILMAZ (blok kontrolü de sayım da atlanır).
+// Gerekçe: özel botun çekirdek kullanıcıları test/yönetim yaparken
+// 6 saatlik bloklara takılmamalı; kota yalnızca normal kullanıcıları frenler.
+function muafMi(user, guildId, guildSahibiMi) {
+  try {
+    if (user && require('./owner').sahipMi(user)) return true;
+  } catch {}
+  try {
+    if (require('./trust').guvenilirMi(guildId, user && user.id, guildSahibiMi === true)) return true;
+  } catch {}
+  return false;
+}
+
+module.exports = { isBlocked, remaining, blockRemainingMs, addUsage, reset, limit, blockMs, muafMi };
