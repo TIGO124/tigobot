@@ -98,19 +98,55 @@ function hedefGuvenli(guild, hedef, L) {
   return { ok: true };
 }
 
+// Son açılan kategori (lonca başına): "o grubun altına X aç" gibi göndermeler
+// en son oluşturulan kategoriye çözülür. 30 dk sonra bayatlar.
+const sonKategoriler = new Map();
+const SON_KATEGORI_MS = 30 * 60 * 1000;
+function sonKategoriKaydet(guildId, kat) {
+  try {
+    if (!guildId || !kat) return;
+    sonKategoriler.set(guildId, { id: kat.id, ad: kat.name, t: Date.now() });
+    if (sonKategoriler.size > 200) sonKategoriler.delete(sonKategoriler.keys().next().value);
+  } catch {}
+}
+function sonKategoriAl(guildId) {
+  try {
+    const k = sonKategoriler.get(guildId);
+    if (!k) return null;
+    if (Date.now() - k.t > SON_KATEGORI_MS) { sonKategoriler.delete(guildId); return null; }
+    return k;
+  } catch { return null; }
+}
+
+// Üst kategori çözümleme: ad -> kategori kanalı (değilse null).
+function kategoriCoz(guild, str) {
+  const c = kanalCoz(guild, str);
+  try {
+    if (c && c.type === ChannelType.GuildCategory) return c;
+  } catch {}
+  return null;
+}
+
 const KATALOG = {
   kanal_ac: {
     risk: 'dusuk',
-    tool: { name: 'kanal_ac', description: 'Sunucuda metin veya ses kanalı açar/oluşturur/ekler. Kullanıcı kanal, oda, chat, sohbet odası derse bu araç.', parameters: { type: 'object', properties: { ad: { type: 'string', description: 'Kanal adı' }, tur: { type: 'string', enum: ['metin', 'ses'], description: 'Kanal türü' } }, required: ['ad', 'tur'] } },
+    tool: { name: 'kanal_ac', description: 'Sunucuda metin veya ses kanalı açar/oluşturur/ekler. Kullanıcı kanal, oda, chat, sohbet odası derse bu araç. ebeveyn verilirse kanal o kategori/grubun altına açılır.', parameters: { type: 'object', properties: { ad: { type: 'string', description: 'Kanal adı' }, tur: { type: 'string', enum: ['metin', 'ses'], description: 'Kanal türü' }, ebeveyn: { type: 'string', description: 'Üst kategori/grup adı (boşsa en üstte açılır)' } }, required: ['ad', 'tur'] } },
     async run(ctx, a) {
       const L = ctx.lang;
       const ad = temizAd(a.ad, 90).toLowerCase().replace(/\s+/g, '-');
       if (!ad) return { ok: false, text: t(L, 'mg.adYok') };
       if (!['metin', 'ses'].includes(a.tur)) return { ok: false, text: t(L, 'mg.turYok') };
+      let parent = null;
+      const eb = temizAd(a.ebeveyn, 90);
+      if (eb) {
+        const kat = kategoriCoz(ctx.guild, eb) || kategoriCoz(ctx.guild, eb.toLocaleLowerCase('tr'));
+        if (kat) parent = kat.id;
+      }
       try {
         const kanal = await ctx.guild.channels.create({
           name: ad,
           type: a.tur === 'ses' ? ChannelType.GuildVoice : ChannelType.GuildText,
+          ...(parent ? { parent } : {}),
           reason: `AI yönetim (${ctx.user.tag})`,
         });
         return { ok: true, text: t(L, 'mg.kanalAcildi', { ch: kanal }) };
@@ -140,6 +176,7 @@ const KATALOG = {
       if (!ad) return { ok: false, text: t(L, 'mg.adYok') };
       try {
         const kat = await ctx.guild.channels.create({ name: ad, type: ChannelType.GuildCategory, reason: `AI yönetim (${ctx.user.tag})` });
+        try { sonKategoriKaydet(ctx.guild && ctx.guild.id, kat); } catch {}
         return { ok: true, text: t(L, 'mg.kategoriAcildi', { ad: kat.name }) };
       } catch { return { ok: false, text: t(L, 'mg.yetkiYok') }; }
     },
@@ -344,4 +381,4 @@ function toolListesi(acikOp) {
     .map(o => ({ type: 'function', function: o.tool }));
 }
 
-module.exports = { KATALOG, toolListesi, uyeCoz, rolCoz, kanalCoz };
+module.exports = { KATALOG, toolListesi, uyeCoz, rolCoz, kanalCoz, kategoriCoz, sonKategoriKaydet, sonKategoriAl };

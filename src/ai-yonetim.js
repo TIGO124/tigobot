@@ -6,7 +6,7 @@
 // - Her uygulama denetim loguna düşer (konsol + logger).
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { t, getLang } = require('./i18n');
-const { KATALOG } = require('./ai-actions');
+const { KATALOG, sonKategoriAl } = require('./ai-actions');
 const perms = require('./ai-perms');
 const { cozumle } = require('./ai-intent');
 
@@ -121,53 +121,92 @@ function sonDenemeAl(guildId) {
   try { return sonDenemeler.get(guildId) || null; } catch { return null; }
 }
 
-// Kural-tabanlı yedek niyet: ajan ıskalarsa ("GENERAL grubu aç" gibi açık
-// durumlarda) deterministik eşleştirme yapar. SADECE düşük-riskli oluşturma
-// işlemleri (kategori_ac, kanal_ac); karmaşık/şüpheli girdilerde null
-// dönüp normal akışa (sohbet+not) bırakır.
+// Kural-tabanlı niyet (dizi döner): açık oluşturma kalıplarında AJANDAN ÖNCE
+// çalışır; deterministik, hızlı, kotasız. SADECE düşük-riskli oluşturma
+// (kategori_ac, kanal_ac); karmaşık/şüpheli girdilerde [] dönüp ajana bırakır.
+// Çoklu ad ("a, b ve c aç") ve üst-kategori ("X grubunun altına") destekler.
+const KURAL_MAX_ISLEM = 5;
 const KURAL_STOP = new Set((
   'yeni bir tane adlı adında isimli lütfen bana bize için icin sunucuya sunucuda ve ile' +
   ' aç açar oluştur olustur create kur ekle kategori kategorisi kategori grup grubu gruba' +
-  ' kanalı kanali kanal oraya buraya şuraya su bu o new a an the please server please'
-).split(/\s+/));
+  ' kanalı kanali kanal oda odası odayı metin ses sesli yazılı yazili' +
+  ' altına altina içine icine grubun grubunun kategorinin kategorisinin diye' +
+  ' oraya buraya şuraya su bu o new a an the please server open make add'
+).split(/\s+/).filter(Boolean));
 
-function kuralAdCikar(soru) {
-  const ham = String(soru || '');
-  // 1) Tırnak içi: "Sohbet" adında kanal aç
-  let m = ham.match(/["'“”]([^"'“”]{2,90})["'“”]/u);
-  if (m) return m[1].trim();
-  // 2) BÜYÜK HARFLİ token: GENERAL grubu aç
-  m = ham.match(/\b[A-ZÇĞİÖŞÜ0-9]{2,}\b/u);
-  if (m) return m[0];
-  // 3) Stopword temizliği sonrası kalan: genel sohbet kanalı aç -> "genel sohbet"
-  const kalan = ham.toLocaleLowerCase('tr').split(/[^\p{L}\p{N}]+/u)
-    .filter(w => w.length >= 2 && !KURAL_STOP.has(w));
-  if (!kalan.length) return null;
-  return kalan.slice(0, 3).join(' ');
+// "X grubunun/kategorisinin altına" kalıbından X'i çıkarır (yoksa null).
+// Öndeki zarflar atılır: "şimdi de o grubun altına" -> "o".
+function kuralEbeveynHam(soru) {
+  const m = String(soru || '').match(
+    /([\p{L}\p{N}\s"'“”'-]{1,60}?)\s+(?:grubun|grubunun|kategorinin|kategorisinin|category\s+of)\s+(?:altına|altina|içine|icine|into|under)/iu
+  );
+  if (!m) return null;
+  const kelimeler = m[1].trim().split(/\s+/).filter(Boolean);
+  if (!kelimeler.length) return null;
+  // Son kelime gönderme zamiriyse (o/bu/şu) tek başına odur; yoksa son 3 kelime addır.
+  const son = kelimeler[kelimeler.length - 1].replace(/^["'“”]+|["'“”]+$/gu, '');
+  if (/^(o|bu|şu|su|that|this)$/i.test(son)) return son;
+  return kelimeler.slice(-3).join(' ');
 }
 
-function kuralNiyet(soru) {
+// Üst-kategori ADINI çözer (run aşamasında ID'ye çevrilir).
+// o/bu/şu göndermesi -> son açılan kategori; açık ad -> ada göre arama.
+function kuralEbeveynAd(guild, ham) {
+  if (!ham) return null;
+  const duz = String(ham).replace(/^["'“”\s]+|["'“”\s]+$/gu, '').trim();
+  if (!duz) return null;
+  if (/^(o|bu|şu|su|that|this)$/i.test(duz)) {
+    try {
+      const son = sonKategoriAl(guild && guild.id);
+      if (son && son.ad) return son.ad;
+    } catch {}
+    return null;
+  }
+  return duz.slice(0, 90);
+}
+
+// Ad listesi çıkarır: tırnaklı tek ad öncelikli, yoksa virgül/ve/ile bölünür.
+function kuralAdlar(soru) {
+  const ham = String(soru || '');
+  const tirnak = ham.match(/["'“”]([^"'“”]{2,90})["'“”]/u);
+  if (tirnak && tirnak[1].trim()) return [tirnak[1].trim()];
+  // Ebeveyn cümleciğini at ("o grubun altına" kısımdaki isim adaya karışmasın)
+  const govde = ham.replace(/^[\s\S]*?(?:altına|altina|içine|icine|into|under)\s+/iu, '');
+  const parcalar = govde.split(/[,;]+|\s+ve\s+|\s+ile\s+/iu).map(s => s.trim()).filter(Boolean);
+  const adlar = [];
+  for (const p of parcalar) {
+    const caps = p.match(/\b[A-ZÇĞİÖŞÜ0-9]{2,}\b/u);
+    if (caps) { adlar.push(caps[0]); continue; }
+    const temiz = p.toLocaleLowerCase('tr').split(/[^\p{L}\p{N}]+/u)
+      .filter(w => w.length >= 2 && !KURAL_STOP.has(w)).slice(0, 3).join(' ');
+    if (temiz) adlar.push(temiz);
+  }
+  return [...new Set(adlar)].slice(0, KURAL_MAX_ISLEM + 5);
+}
+
+function kuralNiyetler(soru, guild) {
   const ham = String(soru || '').toLocaleLowerCase('tr');
-  if (!ham.trim()) return null;
-  // Silme/kapatma kokuyorsa ASLA oluşturma yapma (ajan varken kural karışmasın)
-  if (/(sil|kapat|kaldır|kaldir|delete|remove|temizle|clear)/i.test(ham)) return null;
+  if (!ham.trim()) return [];
+  // Silme/kapatma kokuyorsa ASLA oluşturma yapma
+  if (/(sil|kapat|kaldır|kaldir|delete|remove|temizle|clear)/i.test(ham)) return [];
   // Sayaç/anket/hatırlatıcı "kur" fiiliyle gelir; kanal sanılıp yanlış işlem yapılmasın
-  if (/(sayaç|sayac|counter|anket|poll|oylama|hatırlat|hatirlat|remind)/i.test(ham)) return null;
-  const olusturma = /(aç|oluştur|olustur|create|open|make|add|kur|ekle)/i.test(ham);
-  if (!olusturma) return null;
-  const ad = kuralAdCikar(soru);
-  if (!ad) return null;
-  // "kanal/oda" geçiyorsa kanal (tür: ses geçiyorsa ses), yoksa kategori.
-  // ("GENERAL kanalı" -> kanal; "GENERAL grubu" -> kategori)
-  if (/(kanal|oda|channel|room|chat|sohbet\s*odas)/i.test(ham)) {
-    const tur = /(ses|voice)/i.test(ham) ? 'ses' : 'metin';
-    return { op: 'kanal_ac', args: { ad, tur } };
-  }
+  if (/(sayaç|sayac|counter|anket|poll|oylama|hatırlat|hatirlat|remind)/i.test(ham)) return [];
+  // Mastar kip ("açmayı düşünüyorum") varsayım değil; ajana bırak
+  if (/(açmak|açmayı|oluşturmak|oluşturmayı|opening)/i.test(ham)) return [];
+  if (!/(aç|oluştur|olustur|create|open|make|add|kur|ekle)/i.test(ham)) return [];
+  const kanalMi = /(kanal|oda|channel|room|chat|sohbet\s*odas)/i.test(ham);
   // 'grub' ayrıca: grup->grubu/gruba yumuşamasında 'grup' tutmaz!
-  if (/(kategori|category|categories|grup|grub|group|bölüm|bolum)/i.test(ham)) {
-    return { op: 'kategori_ac', args: { ad } };
+  const kategoriMi = /(kategori|category|categories|grup|grub|group|bölüm|bolum)/i.test(ham);
+  if (!kanalMi && !kategoriMi) return [];
+  const adlar = kuralAdlar(soru);
+  if (!adlar.length) return [];
+  const tur = /(ses|voice)/i.test(ham) ? 'ses' : 'metin';
+  // "kanal/oda" geçiyorsa kanal (GENERAL kanalı), yoksa kategori (GENERAL grubu)
+  if (kanalMi) {
+    const ebAd = kuralEbeveynAd(guild, kuralEbeveynHam(soru));
+    return adlar.map(ad => ({ op: 'kanal_ac', args: ebAd ? { ad, tur, ebeveyn: ebAd } : { ad, tur } }));
   }
-  return null;
+  return adlar.map(ad => ({ op: 'kategori_ac', args: { ad } }));
 }
 
 // ctx: { guild, channel, member, user, lang }
@@ -199,6 +238,35 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
       try { denemeKaydet(ctx.guild.id, 'yetkisiz'); } catch {}
       not('yetkisiz');
       return false;
+    }
+    // KURAL ÖNCE: açık oluşturma kalıplarında ajana sormadan yap
+    // (deterministik, hızlı, kotasız). Kural tutmazsa ajan dener.
+    const kurallar = kuralNiyetler(soru, ctx.guild);
+    if (kurallar.length) {
+      const gecerli = kurallar.filter(k => {
+        const g = KATALOG[k.op];
+        return g && g.risk === 'dusuk' && perms.isOpEnabled(k.op, KATALOG);
+      });
+      if (gecerli.length) {
+        const yapilacak = gecerli.slice(0, KURAL_MAX_ISLEM);
+        const atlanan = gecerli.length - yapilacak.length;
+        const metinler = [];
+        for (const k of yapilacak) {
+          try {
+            const rK = await KATALOG[k.op].run(ctx, k.args);
+            denetim(ctx, k.op, k.args, rK);
+            metinler.push(rK.text);
+          } catch (eK) {
+            iz('kural-hata', ctx, eK && eK.message);
+            metinler.push(t(L, 'err.generic'));
+          }
+        }
+        if (atlanan > 0) metinler.push(t(L, 'mg.cokluAtlandi', { n: atlanan }));
+        denemeKaydet(ctx.guild.id, 'kural-ok', yapilacak.map(k => k.op).join('+'));
+        iz('kural-eslesme', ctx, yapilacak.map(k => `${k.op}:${JSON.stringify(k.args)}`).join(' | ').slice(0, 160));
+        await gonder({ content: metinler.join('\n') }).catch(() => {});
+        return true;
+      }
     }
     let niyet = null;
     try {
@@ -242,26 +310,11 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
       // Yönetime benzemiyor -> temiz sohbet (not YOK, model özgür).
       return false;
     }
-    // Yönetime benziyor ama ajan eşleştiremedi -> önce kural yedeği dene
-    // ("GENERAL grubu aç" gibi açık durumlarda ajana muhtaç kalma).
-    // Kural tutmazsa sohbete düşerken not bırak (uydurma komut engeli).
+    // Ajan da eşleştiremedi -> sohbete düşerken not bırak:
+    // model "nasıl yapılır"ı başka botların komutlarıyla uydurmasın.
     if (!niyet || !niyet.op) {
       iz('eslesme-yok', ctx, soru);
       denemeKaydet(ctx.guild.id, 'eslesme-yok');
-      const kural = kuralNiyet(soru);
-      const girisK = kural && KATALOG[kural.op];
-      if (girisK && girisK.risk === 'dusuk' && perms.isOpEnabled(kural.op, KATALOG)) {
-        try {
-          iz('kural-eslesme', ctx, `${kural.op} ${JSON.stringify(kural.args).slice(0, 120)}`);
-          const sonucK = await girisK.run(ctx, kural.args);
-          denetim(ctx, kural.op, kural.args, sonucK);
-          denemeKaydet(ctx.guild.id, 'kural-ok', kural.op);
-          await gonder({ content: sonucK.text }).catch(() => {});
-          return true;
-        } catch (eK) {
-          iz('kural-hata', ctx, eK && eK.message);
-        }
-      }
       not('anlasilamadi');
       return false;
     }
@@ -289,4 +342,4 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
   }
 }
 
-module.exports = { yonetimAkis, bekleyenAl, opAdi, denetim, yonetimBenzeriMi, kuralNiyet, kuralAdCikar, sonDenemeAl };
+module.exports = { yonetimAkis, bekleyenAl, opAdi, denetim, yonetimBenzeriMi, kuralNiyetler, kuralEbeveynHam, kuralAdlar, KURAL_MAX_ISLEM, sonDenemeAl };
