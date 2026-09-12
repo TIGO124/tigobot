@@ -373,17 +373,41 @@ function kuralAdlar(soru) {
   return [...new Set(adlar)].slice(0, KURAL_MAX_ISLEM + 5);
 }
 
-function kuralNiyetler(soru, guild) {
+function kuralNiyetler(soru, guild, yerineModu = false) {
   const ham = String(soru || '').toLocaleLowerCase('tr');
   if (!ham.trim()) return [];
   // "onu sil onun yerine X aç" düzeltmesi oluşturmadır; silme guard'ına takılmasın.
   // (Ad çıkarımı "yerine" sonrasını kullanır, silinen taraf ajana bile gitmez.)
-  const yerineDuzeltme = /yerine|instead/i.test(ham);
+  // yerineModu: değiştirme dalından özyinelemeli çağrıda türsüz adlar kanal sayılır.
+  const hamYerine = /yerine|instead/i.test(ham);
+  const yerineDuzeltme = hamYerine || yerineModu === true;
   // NOT: "temizle/clear" (mesaj temizliği = mesaj_sil işi) bilerek YOK;
   // kanal silmeyle karışmasın diye ajana bırakılır.
   const silKokusu = /(sil|kapat|kaldır|kaldir|delete|remove)/i.test(ham);
   // Olumsuz emir ("kanalı silme" = silME!) asla silme yapmaz.
   if (/\b(silme|kapatma|silmesene|kapatmasana)\b/i.test(ham)) return [];
+  // Değiştirme kalıbı: "GENERAL grubunu sil ve onun yerine SOHBET22 grubunu aç"
+  // -> [sil(GENERAL), aç(SOHBET22)] iki niyet tek onayda.
+  // ("onu sil onun yerine" pişmanlığında sol taraftan ad çıkmazsa sadece sağ taraf.)
+  if (hamYerine && silKokusu) {
+    const parcalarY = String(soru || '').split(/yerine|instead/iu);
+    const sol = parcalarY[0] || '';
+    const sag = parcalarY.slice(1).join(' ');
+    const solAlt = sol.toLocaleLowerCase('tr');
+    const solSil = /(sil|kapat|kaldır|kaldir|delete|remove)/i.test(solAlt)
+      && !/\b(silme|kapatma|silmesene|kapatmasana)\b/i.test(sol)
+      && !/(silmek|kapatmak|kaldırmak|deleting)/i.test(solAlt);
+    const sagAc = /(aç|ac|oluştur|olustur|create|open|make|add|kur|ekle)/i.test(sag.toLocaleLowerCase('tr'));
+    if (solSil && sagAc) {
+      const solKanalMi = /(kanal|oda|channel|room|chat|sohbet\s*odas)/i.test(sol);
+      const solKategoriMi = /(kategori|category|categories|grup|grub|group|bölüm|bolum)/i.test(sol);
+      const silAdlar = kuralAdlar(sol);
+      const sagNiyetler = kuralNiyetler(sag, guild, true);
+      if (!silAdlar.length) return sagNiyetler;
+      const silOp = (solKategoriMi && !solKanalMi) ? 'kategori_sil' : 'kanal_sil';
+      return [...silAdlar.map(ad => ({ op: silOp, args: { ad } })), ...sagNiyetler];
+    }
+  }
   // Silme dalı: deterministik kural (ajan yokken de çalışır).
   // Mastar kip ("silmek istiyorum") varsayım değil; ajana bırak.
   if (silKokusu && !yerineDuzeltme) {
