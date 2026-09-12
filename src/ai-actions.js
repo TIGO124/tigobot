@@ -281,7 +281,14 @@ const KATALOG = {
       const L = ctx.lang;
       const kat = kategoriCoz(ctx.guild, a.ad)
         || kategoriCoz(ctx.guild, temizAd(a.ad, 90).toLocaleLowerCase('tr'));
-      if (!kat) return { ok: false, text: t(L, 'mg.kategoriYok') };
+      if (!kat) {
+        // Aynı adda kanal varsa yol göster
+        try {
+          const kn = kanalCoz(ctx.guild, a.ad);
+          if (kn) return { ok: false, text: t(L, 'mg.kanalBelki', { ad: kn.name }) };
+        } catch {}
+        return { ok: false, text: t(L, 'mg.kategoriYok') };
+      }
       if (!isteyenIzni(ctx, PermissionFlagsBits.ManageChannels)) return { ok: false, text: t(L, 'mg.yetkiYok') };
       let cocuk = 0;
       try {
@@ -580,8 +587,15 @@ const KATALOG = {
     tool: { name: 'kanal_izin', description: 'Bir kanalda role/kullanıcıya izin açar veya kapatır (özel kanal kurmanın yolu). izin: görüntüle (kanalı görme), yaz (mesaj yazma), baglan (sese bağlanma), hepsi. durum: ac (izin ver) veya kapat (yasakla). Örn: "duyuru kanalında üyelere yazmayı kapat".', parameters: { type: 'object', properties: { kanal: { type: 'string', description: 'Kanal adı' }, hedef: { type: 'string', description: 'Rol veya kullanıcı adı' }, izin: { type: 'string', description: 'görüntüle, yaz, baglan, hepsi' }, durum: { type: 'string', description: 'ac veya kapat' } }, required: ['kanal', 'hedef', 'izin', 'durum'] } },
     async run(ctx, a) {
       const L = ctx.lang;
-      const kanal = kanalCoz(ctx.guild, a.kanal);
-      if (!kanal) return { ok: false, text: t(L, 'mg.kanalYok') };
+      const kanal = kanalCoz(ctx.guild, a.ad);
+      if (!kanal) {
+        // Aynı adda kategori varsa yol göster (kullanıcı tipi karıştırmış olabilir)
+        try {
+          const kat = kategoriCoz(ctx.guild, a.ad) || kategoriCoz(ctx.guild, temizAd(a.ad, 90).toLocaleLowerCase('tr'));
+          if (kat) return { ok: false, text: t(L, 'mg.kategoriBelki', { ad: kat.name }) };
+        } catch {}
+        return { ok: false, text: t(L, 'mg.kanalYok') };
+      }
       try {
         if (kanal.type === ChannelType.GuildCategory) return { ok: false, text: t(L, 'mg.kanalYok') };
       } catch {}

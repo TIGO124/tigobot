@@ -170,6 +170,42 @@ function sonDenemeAl(guildId) {
   try { return sonDenemeler.get(guildId) || null; } catch { return null; }
 }
 
+// Son yönetim isteği (lonca başına): tip-düzeltmeler
+// ("grub demiştim" -> önceki adı kategori olarak dene) için 5 dk saklanır.
+const sonIstekler = new Map();
+const SON_ISTEK_MS = 5 * 60 * 1000;
+function sonIstekKaydet(guildId, op, args) {
+  try {
+    if (!guildId || !op || !args || !args.ad) return;
+    sonIstekler.set(guildId, { op, args: { ...args }, t: Date.now() });
+    if (sonIstekler.size > 200) sonIstekler.delete(sonIstekler.keys().next().value);
+  } catch {}
+}
+function sonIstekAl(guildId) {
+  try {
+    const k = sonIstekler.get(guildId);
+    if (!k) return null;
+    if (Date.now() - k.t > SON_ISTEK_MS) { sonIstekler.delete(guildId); return null; }
+    return k;
+  } catch { return null; }
+}
+
+// Tip düzeltmesi: "grub demiştim" / "kanal olacaktı" (fiilsiz geçmiş zaman).
+// Dönüş: 'kategori' | 'kanal' | null.
+function tipDuzeltme(soru) {
+  const ham = String(soru || '').toLocaleLowerCase('tr');
+  if (!/(demiştim|demiştin|demistim|dedim|olacaktı|olacakti|diyecektim)/i.test(ham)) return null;
+  // İşaret sözcükleri soyulur ("olacaktı"daki "ac" fiil sanılmasın),
+  // kalan çekirdekte gerçek fiil varsa düzeltme değildir.
+  const cekirdek = ham
+    .replace(/demiştim|demiştin|demistim|dedim|olacaktı|olacakti|diyecektim|tigobot/gi, ' ');
+  if (/(sil|kapat|aç|oluştur|olustur|kur|ekle|kaldır|kaldir|düzenle|duzenle|değiştir|degistir)/i.test(cekirdek)) return null;
+  if (/(kategori|grup|grub|group|category|bölüm|bolum)/i.test(ham)) return 'kategori';
+  if (/(kanal|oda|channel|room)/i.test(ham)) return 'kanal';
+  return null;
+}
+const TIP_ESLESME = { kanal_sil: 'kategori_sil', kategori_sil: 'kanal_sil', kanal_ac: 'kategori_ac', kategori_ac: 'kanal_ac' };
+
 // Kural-tabanlı niyet (dizi döner): açık oluşturma kalıplarında AJANDAN ÖNCE
 // çalışır; deterministik, hızlı, kotasız. SADECE düşük-riskli oluşturma
 // (kategori_ac, kanal_ac); karmaşık/şüpheli girdilerde [] dönüp ajana bırakır.
@@ -179,10 +215,11 @@ const KURAL_STOP = new Set((
   'yeni bir tane adlı adında isimli lütfen lutfen bana bize seni sizi onu bunu şunu' +
   ' senden benden bizden sizden ondan bundan için icin sunucuya sunucuda ve ile' +
   ' şimdi simdi şimdide simdide şimdiki hadi bakalım bakim istiyorum istiyorsun istiyoruz istiyom' +
-  ' aç ac açar acar oluştur olustur create kur ekle kategori kategorisi kategori grup grubu gruba grubuna' +
+  ' aç ac açar acar oluştur olustur create kur ekle sil kapat kaldır kaldir delete remove kategori kategorisi kategori grup grubu gruba grubuna' +
   ' kanalı kanali kanal kanalını kanalına kanalında kanallar kanalları kanallarını kanallarına' +
   ' channels oda odası odayı odasını metin ses sesli yazılı yazili' +
-  ' altına altina içine icine grubun grubunun kategorinin kategorisinin diye olarak şekilde' +
+  ' altına altina içine icine grub grubun grubunun kategorinin kategorisinin kategori kategoriye kategorisine gruba grubuna bölüm bolum bölümü bolumu diye olarak şekilde' +
+  ' demiştim demiştin demistim dedim demek olacaktı olacaktı diyecektim' +
   ' açmanı acmani açmayı acmayi açmamı acmami yapmanı yapmayı yapmamı kurmanı oluşturmanı olusturmani' +
   ' açabilir acabilir açarmısın acarmisin yapar mısın misin musun müsün mı mi mu mü' +
   ' de da ki yi yı yu yü ye ya sırasıyla sirasıyla sırayla sirayla sırası sırasıyle tekrar yeniden düzelt duzelt yanlış yanlis yapmamışsın yapmamissin tigobot bot new a an the please server open make add to into under' +
@@ -442,6 +479,42 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
       not('yetkisiz');
       return false;
     }
+    // Tip düzeltmesi: önceki isteğin adını diğer tiple dene
+    // ("GENERAL i sil" [kanal bulunamadı] -> "grub demiştim" [kategori dene]).
+    // Onay kartı dahil normal borudan geçer (güvenlik aynen uygulanır).
+    try {
+      const duzTip = tipDuzeltme(soru);
+      if (duzTip) {
+        const son = sonIstekAl(ctx.guild.id);
+        if (son && son.args && son.args.ad) {
+          const aday = TIP_ESLESME[son.op] || null;
+          const uygun = aday && ((duzTip === 'kategori' && aday.includes('kategori')) || (duzTip === 'kanal' && aday.includes('kanal')));
+          if (uygun && perms.isOpEnabled(aday, KATALOG)) {
+            const duzPlan = [{ op: aday, args: { ...son.args } }];
+            sonIstekKaydet(ctx.guild.id, aday, duzPlan[0].args);
+            try { denemeKaydet(ctx.guild.id, 'duzeltme', `${son.op}->${aday}`); } catch {}
+            iz('tip-duzeltme', ctx, `${son.op}->${aday}:${JSON.stringify(duzPlan[0].args).slice(0, 120)}`);
+            if (KATALOG[aday].risk === 'yuksek' && perms.needsApproval(aday)) {
+              await onaySorPlan(gonder, ctx, duzPlan);
+              return true;
+            }
+            const dMetinler = [];
+            for (const adim of duzPlan) {
+              try {
+                const r = await KATALOG[adim.op].run(ctx, adim.args);
+                denetim(ctx, adim.op, adim.args, r);
+                dMetinler.push((r.ok ? '✓ ' : '✗ ') + clip(String(r.text || ''), 300));
+              } catch (eK) {
+                iz('duzeltme-hata', ctx, `${adim.op}: ${eK && eK.message}`);
+                dMetinler.push('✗ ' + adim.op);
+              }
+            }
+            await gonder({ content: dMetinler.join('\n').slice(0, 2000) }).catch(() => {});
+            return true;
+          }
+        }
+      }
+    } catch {}
     // KURAL ÖNCE: açık kalıplarda ajana sormadan yap
     // (deterministik, hızlı, kotasız, ajan kapalıyken de çalışır).
     // Kural tutmazsa ajan dener.
@@ -459,9 +532,11 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
         if (yapilacak.some(k => KATALOG[k.op].risk === 'yuksek' && perms.needsApproval(k.op))) {
           if (atlanan > 0) iz('kural-atlandi', ctx, String(atlanan));
           try { denemeKaydet(ctx.guild.id, 'kural-onay', yapilacak.map(k => k.op).join('+')); } catch {}
+          sonIstekKaydet(ctx.guild.id, yapilacak[0].op, yapilacak[0].args);
           await onaySorPlan(gonder, ctx, yapilacak.map(k => ({ op: k.op, args: k.args })));
           return true;
         }
+        sonIstekKaydet(ctx.guild.id, yapilacak[0].op, yapilacak[0].args);
         const metinler = [];
         for (const k of yapilacak) {
           try {
@@ -560,9 +635,11 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
     }
     // Yüksek-risk + onay gerektiren adım varsa TÜM plan tek onay kartında.
     if (plan.some(p => KATALOG[p.op].risk === 'yuksek' && perms.needsApproval(p.op))) {
+      sonIstekKaydet(ctx.guild.id, plan[0].op, plan[0].args);
       await onaySorPlan(gonder, ctx, plan);
       return true;
     }
+    sonIstekKaydet(ctx.guild.id, plan[0].op, plan[0].args);
     const metinler = [];
     for (const adim of plan) {
       try {
@@ -588,4 +665,4 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
   }
 }
 
-module.exports = { yonetimAkis, bekleyenAl, opAdi, denetim, yonetimBenzeriMi, kuralNiyetler, kuralEbeveynHam, kuralAdlar, kuralAralikAdlar, KURAL_MAX_ISLEM, sonDenemeAl, uyeTamamla };
+module.exports = { yonetimAkis, bekleyenAl, opAdi, denetim, yonetimBenzeriMi, kuralNiyetler, kuralEbeveynHam, kuralAdlar, kuralAralikAdlar, KURAL_MAX_ISLEM, sonDenemeAl, uyeTamamla, tipDuzeltme, sonIstekKaydet, sonIstekAl };
