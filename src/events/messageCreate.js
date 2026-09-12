@@ -130,9 +130,9 @@ module.exports = {
       if (message.guild && sohbetBul(message.channelId)) {
         const soru = (message.content || '').trim();
         if (!soru) return;
-        // Doğal kapatma isteği ("bu sohbeti kapat") ajana gitmeden doğrudan
-        // işletilir (ajan kapalıyken bile çalışır).
-        if (/sohbeti?\s*kapat|kapat\s*bu\s*sohbet|close\s*(this\s*)?(chat|sohbet)/i.test(soru)
+        // Doğal kapatma isteği ("bu sohbeti kapat" / "bu sohbeti sil") ajana
+        // gitmeden doğrudan işletilir (ajan kapalıyken bile çalışır).
+        if (/sohbeti?\s*(kapat|sil)|kapat\s*bu\s*sohbet|sil\s*bu\s*sohbet|close\s*(this\s*)?(chat|sohbet)/i.test(soru)
           && !/kapatma/i.test(soru)) {
           const { kaldir } = require('../sohbet');
           try { kaldir(message.channelId); } catch {}
