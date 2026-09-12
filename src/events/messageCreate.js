@@ -9,6 +9,7 @@ const { isBlocked, blockRemainingMs, muafMi } = require('../quota');
 const { bul: otocevapBul } = require('../otocevap');
 const { clip } = require('../sanitize');
 const { kullanabilirMi } = require('../owner');
+const { bul: sohbetBul } = require('../sohbet');
 
 // İsmi geçen veya etiketlenen mesajlarda bota soru sorulmuş sayılır.
 // Örnek: "nasılsın tigobot" -> soru "nasılsın" olur.
@@ -29,6 +30,14 @@ async function handleMention(message) {
     await message.reply(t(L0, 'ai.toolong', { max: MAX_SORU }));
     return true;
   }
+  await yapayZekaYaniti(message, soru);
+  return true;
+}
+
+// Soru hazırlandıktan sonraki ortak akış: kota/cooldown -> (opsiyonel yönetim) -> aiAkis.
+// Hem mention ("tigobot ...") hem özel sohbet kanalı burayı kullanır.
+async function yapayZekaYaniti(message, soru) {
+  const L0 = getLang(message.guildId);
   const sahipMi = message.guild?.ownerId === message.author.id;
   const guvenilir = guvenilirMi(message.guildId, message.author.id, sahipMi);
   // Token kotası: SADECE muaf olmayanlara işler (sahip/güvenilir takılmaz).
@@ -113,6 +122,21 @@ module.exports = {
 
     try {
       if (await handleMention(message)) return;
+    } catch {}
+
+    // Özel sohbet kanalı (/sohbet-olustur): "tigobot" demeden her mesaj AI'ya gider.
+    // Küfür/davet filtresi burada çalışmaz (kanal zaten gizli).
+    try {
+      if (message.guild && sohbetBul(message.channelId)) {
+        const soru = (message.content || '').trim();
+        if (!soru) return;
+        if (soru.length > MAX_SORU) {
+          await message.reply(t(getLang(message.guildId), 'ai.toolong', { max: MAX_SORU }));
+          return;
+        }
+        await yapayZekaYaniti(message, soru);
+        return;
+      }
     } catch {}
 
     if (!message.guild) return;

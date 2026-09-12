@@ -247,6 +247,16 @@ tr:last-child td{border-bottom:none}
   </div>
 
   <div class="sec">
+    <h2>💬 Özel Sohbetler <span class="tag" id="sohbetTag">0</span></h2>
+    <p class="d">/sohbet-olustur ile açılan gizli kanallar ve içerikleri (Discord'dan canlı çekilir).</p>
+    <div class="row" style="margin-bottom:12px">
+      <div style="flex:1;min-width:220px"><span class="flabel">Kanal</span><select class="sel" id="sohbetSel"></select></div>
+      <button class="btn" id="sohbetBtn">↻ İçeriği getir</button>
+    </div>
+    <div id="sohbetMsgs"><div class="empty">kanal seçip içeriği getir.</div></div>
+  </div>
+
+  <div class="sec">
     <h2>📜 Loglar <span class="tag">canlı</span></h2>
     <p class="d">Son 300 satırlık halka tampon. 5 saniyede bir tazelenir.</p>
     <div class="logbar">
@@ -326,12 +336,35 @@ async function loadConfig(){
     [c.langCount,'dilli sunucu'],[c.trustCount,'trust kaydı'],
     [c.counterCount,'sayaç kanalı'],[c.historyCount,'hafızalı sohbet'],
     [c.modelCount,'AI modeli'],[c.pollCount,'aktif anket'],
+    [c.sohbetCount || 0,'özel sohbet'],
   ].map(([v,k])=>`<div><b>${v}</b><span>${k}</span></div>`).join('');
   $('guilds').innerHTML = c.guilds.length ? c.guilds.map(g=>
     `<tr><td>${esc(g.name)}</td><td>${esc(g.id)}</td><td>${g.members}</td><td><span class="langbadge">${esc(g.lang)}</span></td></tr>`
   ).join('') : '<tr><td colspan="4" class="empty">sunucu yok</td></tr>';
   $('guildTag').textContent = c.guilds.length;
 }
+async function loadSohbet(){
+  const list = await api('/api/sohbet');
+  $('sohbetTag').textContent = list.length;
+  $('sohbetSel').innerHTML = list.length ? list.map(s=>
+    `<option value="${esc(s.channelId)}">${esc(s.guildName || s.guildId || '?')} / #${esc(s.channelName || s.channelId)} — ${esc(s.userTag || s.userId || '?')}</option>`).join('')
+    : '<option value="">sohbet yok</option>';
+  if (list.length) loadSohbetMsgs().catch(()=>{});
+  else $('sohbetMsgs').innerHTML = '<div class="empty">açık sohbet yok.</div>';
+}
+async function loadSohbetMsgs(){
+  const id = $('sohbetSel').value;
+  if (!id) { $('sohbetMsgs').innerHTML = '<div class="empty">açık sohbet yok.</div>'; return; }
+  $('sohbetMsgs').innerHTML = '<div class="empty">yükleniyor…</div>';
+  try {
+    const msgs = await api('/api/sohbet?channelId='+encodeURIComponent(id)+'&limit=50');
+    $('sohbetMsgs').innerHTML = msgs.length ? msgs.map(m=>
+      `<div style="margin-bottom:10px"><span class="t" style="color:#525c78;font-family:'JetBrains Mono';font-size:11px">${esc(new Date(m.at).toLocaleString('tr'))}</span> <b style="font-size:13px;color:${m.bot?'var(--cyan)':'var(--lime)'}">${esc(m.author)}</b><br><span style="font-size:12.5px">${esc(m.text) || '<i style="color:var(--dim)">(boş/ek)</i>'}</span></div>`).join('')
+      : '<div class="empty">mesaj yok</div>';
+  } catch(e){ if (!/401/.test(e.message||'')) $('sohbetMsgs').innerHTML = '<div class="empty">okunamadı (kanal silinmiş olabilir).</div>'; }
+}
+$('sohbetBtn').onclick = () => { loadSohbet().then(()=>loadSohbetMsgs().catch(()=>{})).catch(()=>{}); };
+$('sohbetSel').onchange = () => loadSohbetMsgs().catch(()=>{});
 async function loadLogs(){
   const lv = $('level').value;
   const logs = await api('/api/logs?limit=120'+(lv?'&level='+lv:''));
@@ -470,7 +503,7 @@ async function toggleModel(type, key, el){
   el.style.opacity = '';
 }
 async function refreshAll(){
-  try { await Promise.all([loadStats(), loadConfig(), loadLogs(), loadModels(), loadAimanage()]); hideGate(); }
+  try { await Promise.all([loadStats(), loadConfig(), loadLogs(), loadModels(), loadAimanage(), loadSohbet()]); hideGate(); }
   catch(e){ if (!/401/.test(e.message||'')) $('conn').textContent='bağlantı hatası'; }
 }
 $('mgmtSw').onclick = async () => {

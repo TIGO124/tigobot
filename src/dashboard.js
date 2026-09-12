@@ -18,6 +18,7 @@ const { allModels, isChatEnabled, setChatEnabled, getGlobalModel, setGlobalModel
 const { IMG_MODELS, isImgEnabled, setImgEnabled, getGlobalImgModel, setGlobalImgModel, getGuildImgModelKey, setGuildImgModel, effectiveImgModel } = require('./ai-image');
 const perms = require('./ai-perms');
 const { KATALOG } = require('./ai-actions');
+const sohbet = require('./sohbet');
 
 function guildList(client) {
   const out = [];
@@ -35,6 +36,7 @@ function configSummary(client) {
   const counter = load('counter.json', {});
   const history = load('aihistory.json', {});
   const polls = load('ankets.json', {});
+  const chats = load('sohbet.json', {});
   return {
     local: acikMi(),
     nvidiaKey: Boolean(process.env.NVIDIA_API_KEY),
@@ -43,6 +45,7 @@ function configSummary(client) {
     counterCount: Object.keys(counter).length,
     historyCount: Object.keys(history).length,
     pollCount: Object.keys(polls).length,
+    sohbetCount: Object.keys(chats).length,
     modelCount: allModels().length,
     guilds: guildList(client),
   };
@@ -94,6 +97,65 @@ function start(client) {
         let logs = getLogs(url.searchParams.get('limit') || 120);
         if (level) logs = logs.filter(l => l.level === level);
         return json(res, 200, logs);
+      }
+      // Özel sohbetler (/sohbet-olustur): liste + içerik (Discord'dan canlı).
+      if (req.method === 'GET' && url.pathname === '/api/sohbet') {
+        if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
+        const kanalId = url.searchParams.get('channelId');
+        if (kanalId) {
+          const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '50', 10) || 50));
+          let kanal = null;
+          try {
+            for (const g of client.guilds.cache.values()) {
+              try {
+                const c = g.channels.cache.get(kanalId);
+                if (c) { kanal = c; break; }
+              } catch {}
+            }
+          } catch {}
+          if (!kanal || typeof kanal.isTextBased !== 'function' || !kanal.isTextBased()) {
+            try { sohbet.kaldir(kanalId); } catch {}
+            return json(res, 404, { error: 'kanal yok' });
+          }
+          kanal.messages.fetch({ limit }).then(
+            msgs => {
+              try {
+                const out = [...msgs.values()]
+                  .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+                  .map(m => ({
+                    id: m.id,
+                    author: (m.author && (m.author.tag || m.author.username)) || '?',
+                    bot: Boolean(m.author && m.author.bot),
+                    text: String(m.content || '').slice(0, 2000),
+                    at: m.createdTimestamp,
+                  }));
+                json(res, 200, out);
+              } catch {
+                json(res, 500, { error: 'okunamadı' });
+              }
+            },
+            () => json(res, 500, { error: 'okunamadı' })
+          );
+          return;
+        }
+        try {
+          const out = sohbet.liste().map(k => {
+            let channelName = null;
+            let guildName = null;
+            try {
+              const g = client.guilds.cache.get(k.guildId);
+              if (g) {
+                guildName = g.name;
+                const c = g.channels.cache.get(k.channelId);
+                if (c) channelName = c.name;
+              }
+            } catch {}
+            return { ...k, channelName, guildName };
+          });
+          return json(res, 200, out);
+        } catch {
+          return json(res, 500, { error: 'okunamadı' });
+        }
       }
       if (req.method === 'GET' && url.pathname === '/api/models') {
         if (!tokenOk(req)) return json(res, 401, { error: 'unauthorized' });
