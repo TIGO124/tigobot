@@ -66,7 +66,7 @@ async function kademeliGoster(mesaj, ekGonder, lang, tamMetin) {
 // yarışıp eski "oluşturuluyor…" metni cevabın üstüne yazılıyordu (takılı
 // thinking bug'ı). Yerine Discord'un yerleşik "yazıyor..." göstergesi
 // (sendTyping) kullanılır; arkada mesaj bırakmaz, eskir hale gelmez.
-async function aiAkis({ ilkGonder, ekGonder, kanal, userId, userTag, guildId, model, yedek, soru, ekBaglam = '' }) {
+async function aiAkis({ ilkGonder, ekGonder, kanal, userId, userTag, guildId, model, yedek, soru, ekBaglam = '', yonetimNotu = '' }) {
   const taban = getLang(guildId);
   let lang = taban;
   // Kullanıcı varsayılan dilden farklı dilde yazdıysa dile geç (+ sunucuda kalıcı yap)
@@ -112,10 +112,13 @@ async function aiAkis({ ilkGonder, ekGonder, kanal, userId, userTag, guildId, mo
   } catch {}
   // Soru metni: yanıt-bağlamı (reply referansı) varsa öne eklenir
   const soruMetni = ekBaglam ? `${ekBaglam}\n\nSoru: ${soru}` : soru;
+  // Yönetim denenip sohbete düşüldüyse notu sistem bağlamına ekle
+  // (model uydurma komut veremesin); arama notuyla birleşir.
+  const yonetimEki = String(yonetimNotu || '').trim();
   const { sonuc } = kuyrugaEkle(userId, userTag, aktifModel.key, () => {
     // Sohbet hafızası: alakalı turlar bağlam olarak gönderilir
     const gecmis = gecmisteAra(userId, guildId, soru);
-    return uretimYap(aktifModel, yedek, [...gecmis, { role: 'user', content: soruMetni }], lang, ekstraSistem);
+    return uretimYap(aktifModel, yedek, [...gecmis, { role: 'user', content: soruMetni }], lang, [ekstraSistem, yonetimEki].filter(Boolean).join('\n\n'));
   });
   try {
     const res = await sonuc;

@@ -20,7 +20,7 @@ function setLang(guildId, lang) {
 
 const STR = {
 tr: {
-  'sys.prompt': 'Senin adın TigoBot. Türkçe konuşan, yardımsever ve öz cevaplar veren bir Discord botusun. Seni caglar_007 yarattı ve geliştirdi. Sana nasılsın diye sorulursa kendini TigoBot olarak tanıtarak cevap ver, örneğin: "Merhaba, iyiyim! TigoBot olarak yardıma hazırım." Seni kim yarattı veya gerçek kimliğin ne diye sorulursa TigoBot olduğunu ve caglar_007 tarafından yapıldığını söyle. Asla OpenAI, Meta, Google veya başka bir şirket tarafından yapıldığını iddia etme, asla başka bir isim, model adı veya kimlik kullanma. Uzun cevaplarda bölümleri Örnek:, Not:, Uyarı: gibi başlıklarla ayır; kodları ```bloklarına koy.',
+  'sys.prompt': 'Senin adın TigoBot. Türkçe konuşan, yardımsever ve öz cevaplar veren bir Discord botusun. Seni caglar_007 yarattı ve geliştirdi. Sana nasılsın diye sorulursa kendini TigoBot olarak tanıtarak cevap ver, örneğin: "Merhaba, iyiyim! TigoBot olarak yardıma hazırım." Seni kim yarattı veya gerçek kimliğin ne diye sorulursa TigoBot olduğunu ve caglar_007 tarafından yapıldığını söyle. Asla OpenAI, Meta, Google veya başka bir şirket tarafından yapıldığını iddia etme, asla başka bir isim, model adı veya kimlik kullanma. Sunucu yönetimiyle ilgili sorularda başka botlara ait komutları (!, ?, / önekiyle) ASLA uydurma; böyle bir komut verme, yapamadığın işi tarif edip geçiştirme. Uzun cevaplarda bölümleri Örnek:, Not:, Uyarı: gibi başlıklarla ayır; kodları ```bloklarına koy.',
   'err.generic': 'Bir sorun oluştu. Lütfen tekrar dene.',
   'err.cmd': 'Komutta hata oluştu!',
   'err.btn': 'İşlem sırasında hata oluştu!',
@@ -268,6 +268,11 @@ tr: {
   'mg.reddedildi': 'İşlem reddedildi, uygulanmadı.',
   'mg.islemKapali': 'Bu işlem şu anda kapalı.',
   'mg.yonetimHata': 'İsteğini anlayamadım, tekrar dener misin? (örn. "GENERAL adında kategori aç") [teknik: {teknik}]',
+  'mg.chatNotu': 'ÖNEMLİ NOT: Bu istek sunucu yönetimi gibi görünüyordu ama uygulanamadı ({neden}). Başka Discord botlarına ait komutları (!, ?, / önekiyle) ASLA uydurma veya önerme. Yapamadığını kısaca söyle; gerekiyorsa netleştirme sorusu sor.',
+  'mg.neden.dm': 'özel mesajda sunucu yönetimi yapılamaz',
+  'mg.neden.yetkisiz': 'bunu yapmaya yetkin yok (sunucu sahibi veya bot sahibi gerekli)',
+  'mg.neden.anlasilamadi': 'yönetim isteği olarak anlaşılamadı (normal sohbetse normal cevapla)',
+  'mg.neden.hata': 'işlem sırasında beklenmeyen bir hata oldu',
   'mg.modelYok': 'Yönetim modeli PC’deki Ollama’da bulunamadı. PC’de şunu çalıştır: `ollama pull qwen3.5:9b` — sonra tekrar dene.',
   'mg.modelHata': 'PC’deki 9B modeli isteği kaldıramadı (bellek/VRAM yetersiz olabilir). PC’de `ollama ps` ile bak, gerekirse `ollama stop qwen3.5:4b` ile yer açıp tekrar dene.',
   'mg.ajanHata': 'Ajan modeline ulaşılamadı (NVIDIA anahtarı/kota sorunu olabilir).',
@@ -356,7 +361,7 @@ tr: {
   'filter.warn': '{u}, Bu tür mesajlar bu sunucuda yasak!',
 },
 en: {
-  'sys.prompt': 'Your name is TigoBot. You are a helpful Discord bot that speaks English and gives concise answers. You were created and developed by caglar_007. When asked how you are, introduce yourself as TigoBot, for example: "Hello, I am fine! Ready to help as TigoBot." When asked who created you or what your real identity is, say you are TigoBot made by caglar_007. Never claim to be made by OpenAI, Meta, Google or any other company, and never use any other name, model name or identity. In long answers, separate sections with headers like Example: and Note:, and put code in ``` blocks.',
+  'sys.prompt': 'Your name is TigoBot. You are a helpful Discord bot that speaks English and gives concise answers. You were created and developed by caglar_007. When asked how you are, introduce yourself as TigoBot, for example: "Hello, I am fine! Ready to help as TigoBot." When asked who created you or what your real identity is, say you are TigoBot made by caglar_007. Never claim to be made by OpenAI, Meta, Google or any other company, and never use any other name, model name or identity. For server management questions, NEVER invent commands belonging to other bots (with !, ?, / prefixes); do not give such a command, do not paper over work you cannot do. In long answers, separate sections with headers like Example: and Note:, and put code in ``` blocks.',
   'err.generic': 'Something went wrong. Please try again.',
   'err.cmd': 'An error occurred in the command!',
   'err.btn': 'An error occurred while processing!',
@@ -604,6 +609,11 @@ en: {
   'mg.reddedildi': 'Rejected, nothing was done.',
   'mg.islemKapali': 'This operation is currently disabled.',
   'mg.yonetimHata': 'I could not understand that, try again? (e.g. "create category GENERAL") [tech: {teknik}]',
+  'mg.chatNotu': 'IMPORTANT NOTE: This request looked like server management but it was NOT carried out ({neden}). NEVER invent or suggest commands belonging to other Discord bots (with !, ?, / prefixes). Briefly say you could not do it; ask a clarifying question if needed.',
+  'mg.neden.dm': 'server management cannot be done in direct messages',
+  'mg.neden.yetkisiz': 'you lack permission for this (server owner or bot owner required)',
+  'mg.neden.anlasilamadi': 'could not be understood as a management request (if normal chat, reply normally)',
+  'mg.neden.hata': 'an unexpected error occurred during processing',
   'mg.modelYok': 'Management model not found in PC Ollama. On your PC run: `ollama pull qwen3.5:9b` — then try again.',
   'mg.modelHata': 'The 9B model on your PC failed the request (low memory/VRAM?). On your PC check `ollama ps`, free space with `ollama stop qwen3.5:4b` if needed, then try again.',
   'mg.ajanHata': 'Cannot reach the agent model (NVIDIA key/quota issue?).',

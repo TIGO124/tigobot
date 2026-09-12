@@ -229,6 +229,7 @@ async function cozumle(soru, lang, guildId) {
     const yedekAyar = { ...ayar, timeoutMs: Math.min(ayar.timeoutMs, 60000) };
     const hatalar = [];
     let atlanan = 0;
+    let hataSayisi = 0;
     for (const yh of adaylar) {
       if (adayOlumu(yh.ad)) { atlanan++; continue; }
       try {
@@ -242,6 +243,7 @@ async function cozumle(soru, lang, guildId) {
         // 401/403 (key sorunu): diğer modelleri denemenin anlamı yok,
         // üstte ajanHata mesajına dönüşür.
         if (/401|403/.test(String((e2 && e2.message) || ''))) throw e2;
+        hataSayisi++;
         const ym = String((e2 && e2.message) || e2).slice(0, 160);
         try { console.log(`AI-YEDEK ${yh.ad} hata: ${ym}`); } catch {}
         hatalar.push(`${yh.ad}: ${ym}`);
@@ -251,6 +253,10 @@ async function cozumle(soru, lang, guildId) {
         else if (/AI hatası \(429\)/.test(ym)) adayOlduIsaretle(yh.ad, false);
       }
     }
+    // Hiçbir yedek HATA vermediyse (hepsi "yönetim değil" dedi): yerel yokluğunu
+    // hata diye gösterme; dürüstçe "anlaşılamadı" dön, sohbet notla devam etsin.
+    // (Yoksa "PC kapalı" hatası, aslında yönetim-olmayan soruya da çıkardı.)
+    if (hataSayisi === 0 && atlanan === 0) return { eslesme: false };
     // Tüm yedekler patladı: orijinal yerel hatayı taşı (mesajlar doğru kalsın),
     // denenenlerin özeti teknik detay olarak eklenir.
     if (!hatalar.length && atlanan > 0) {

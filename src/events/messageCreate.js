@@ -55,17 +55,21 @@ async function handleMention(message) {
     ekBaglam = (await yanitBaglami(message)) || '';
   } catch {}
   // AI yönetim: "tigobot general kanalını oluştur" gibi istekler önce buraya düşer.
-  // Yönetim değilse/yetkisizse false döner ve normal sohbet devam eder.
+  // Ele alınmazsa neden-notu sohbete eklenir (model uydurma komut veremesin).
   // Ucuz kelime ön-filtresi: yönetim alameti yoksa 9B'ye hiç sorulmaz (sohbet gecikmez).
+  let yonetimNotu = '';
   try {
     const { yonetimAkis, yonetimBenzeriMi } = require('../ai-yonetim');
     if (yonetimBenzeriMi(soru)) {
+      const bilgi = {};
       const eleAlindi = await yonetimAkis(
         { guild: message.guild, channel: message.channel, member: message.member, user: message.author, lang: L0 },
         soru,
-        o => message.reply(o)
+        o => message.reply(o),
+        bilgi
       );
       if (eleAlindi) return true;
+      yonetimNotu = (bilgi && bilgi.not) || '';
     }
   } catch {}
   await aiAkis({
@@ -79,6 +83,7 @@ async function handleMention(message) {
     yedek: defaultNvidia(),
     soru,
     ekBaglam,
+    yonetimNotu,
   });
   return true;
 }

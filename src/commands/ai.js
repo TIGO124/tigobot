@@ -41,17 +41,21 @@ function build(lang) {
     // otomatik followUp'a düşer, sessiz ölüm kapanır.
     await interaction.deferReply();
     // AI yönetim: soru yönetim niyeti taşıyorsa önce burası ele alır.
+    // Ele alınmazsa neden-notu sohbete eklenir (model uydurma komut veremesin).
     // Ucuz kelime ön-filtresi: alamet yoksa 9B'ye sorulmaz, sohbet gecikmez.
+    let yonetimNotu = '';
     try {
       const { yonetimAkis, yonetimBenzeriMi } = require('../ai-yonetim');
       if (yonetimBenzeriMi(soru)) {
         const gonder = o => (interaction.replied || interaction.deferred
           ? interaction.followUp(o)
           : interaction.reply(o));
+        const bilgi = {};
         const eleAlindi = await yonetimAkis(
           { guild: interaction.guild, channel: interaction.channel, member: interaction.member, user: interaction.user, lang: L },
           soru,
-          gonder
+          gonder,
+          bilgi
         );
         if (eleAlindi) {
           // Defer placeholder'ı çöpe at: sonuç followUp ile geldi, boş
@@ -59,6 +63,7 @@ function build(lang) {
           await interaction.deleteReply().catch(() => {});
           return;
         }
+        yonetimNotu = (bilgi && bilgi.not) || '';
       }
     } catch {}
     await aiAkis({
@@ -71,6 +76,7 @@ function build(lang) {
       model,
       yedek: defaultNvidia(),
       soru,
+      yonetimNotu,
     });
   }
 

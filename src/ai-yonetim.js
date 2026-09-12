@@ -107,12 +107,25 @@ function iz(neden, ctx, ekstra) {
 
 // ctx: { guild, channel, member, user, lang }
 // gonder: (payload) => Promise (reply/send soyutlaması)
-async function yonetimAkis(ctx, soru, gonder) {
+// bilgi (opsiyonel, {}): yönetim ele ALINMADAN sohbete düşülürse nedeni yazar:
+//   { neden: 'dm'|'kapali'|'yetkisiz'|'anlasilamadi'|'hata', not: '<sohbete eklenecek not>' }.
+// Çağıran bu notu sohbet sistem-promptuna eklerse model, yapılamayan isteği
+// uydurma komutlarla (!, ?) geçiştiremez; dürüstçe açıklar.
+async function yonetimAkis(ctx, soru, gonder, bilgi) {
   const L = ctx.lang;
+  const not = (kod) => {
+    try {
+      if (bilgi && typeof bilgi === 'object' && kod) {
+        bilgi.neden = kod;
+        bilgi.not = t(L, 'mg.chatNotu', { neden: t(L, `mg.neden.${kod}`) });
+      }
+    } catch {}
+  };
   try {
-    if (!ctx.guild) return false;
+    if (!ctx.guild) { not('dm'); return false; }
+    // Özellik kapalıysa temiz sohbet doğru davranıştır (not YOK).
     if (!perms.acikMi(ctx.guild.id)) { iz('kapali', ctx); return false; }
-    if (!perms.kullanabilirMiYonetim(ctx.user, ctx.member, ctx.guild)) { iz('yetkisiz', ctx); return false; }
+    if (!perms.kullanabilirMiYonetim(ctx.user, ctx.member, ctx.guild)) { iz('yetkisiz', ctx); not('yetkisiz'); return false; }
     let niyet = null;
     try {
       niyet = await cozumle(soru, L, ctx.guild.id);
@@ -151,9 +164,12 @@ async function yonetimAkis(ctx, soru, gonder) {
         await gonder({ content: t(L, 'mg.yonetimHata', { teknik: sanitize(msg).slice(0, 120) || '?' }) }).catch(() => {});
         return true;
       }
+      // Yönetime benzemiyor -> temiz sohbet (not YOK, model özgür).
       return false;
     }
-    if (!niyet || !niyet.op) { iz('eslesme-yok', ctx, soru); return false; } // yönetim değil -> normal sohbet
+    // Yönetime benziyor ama ajan eşleştiremedi -> sohbete düşerken not bırak:
+    // model "nasıl yapılır"ı başka botların komutlarıyla uydurmasın.
+    if (!niyet || !niyet.op) { iz('eslesme-yok', ctx, soru); not('anlasilamadi'); return false; }
     if (niyet.yedek) iz('yedek-ajan', ctx, niyet.yedek); // yerel patladı, NVIDIA yedek çözdü
     const giris = KATALOG[niyet.op];
     if (!giris || !perms.isOpEnabled(niyet.op, KATALOG)) {
@@ -170,6 +186,8 @@ async function yonetimAkis(ctx, soru, gonder) {
     return true;
   } catch (e) {
     iz('akis-hata', ctx, e && e.message);
+    // Beklenmeyen patlama da sessiz sohbete gömülmesin: model dürüst açıklasın.
+    try { not('hata'); } catch {}
     return false;
   }
 }
