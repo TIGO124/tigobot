@@ -587,11 +587,11 @@ const KATALOG = {
     tool: { name: 'kanal_izin', description: 'Bir kanalda role/kullanıcıya izin açar veya kapatır (özel kanal kurmanın yolu). izin: görüntüle (kanalı görme), yaz (mesaj yazma), baglan (sese bağlanma), hepsi. durum: ac (izin ver) veya kapat (yasakla). Örn: "duyuru kanalında üyelere yazmayı kapat".', parameters: { type: 'object', properties: { kanal: { type: 'string', description: 'Kanal adı' }, hedef: { type: 'string', description: 'Rol veya kullanıcı adı' }, izin: { type: 'string', description: 'görüntüle, yaz, baglan, hepsi' }, durum: { type: 'string', description: 'ac veya kapat' } }, required: ['kanal', 'hedef', 'izin', 'durum'] } },
     async run(ctx, a) {
       const L = ctx.lang;
-      const kanal = kanalCoz(ctx.guild, a.ad);
+      const kanal = kanalCoz(ctx.guild, a.kanal);
       if (!kanal) {
         // Aynı adda kategori varsa yol göster (kullanıcı tipi karıştırmış olabilir)
         try {
-          const kat = kategoriCoz(ctx.guild, a.ad) || kategoriCoz(ctx.guild, temizAd(a.ad, 90).toLocaleLowerCase('tr'));
+          const kat = kategoriCoz(ctx.guild, a.kanal) || kategoriCoz(ctx.guild, temizAd(a.kanal, 90).toLocaleLowerCase('tr'));
           if (kat) return { ok: false, text: t(L, 'mg.kategoriBelki', { ad: kat.name }) };
         } catch {}
         return { ok: false, text: t(L, 'mg.kanalYok') };
@@ -1271,4 +1271,36 @@ function toolListesi(acikOp) {
     .map(o => ({ type: 'function', function: o.tool }));
 }
 
-module.exports = { KATALOG, toolListesi, uyeCoz, rolCoz, kanalCoz, kategoriCoz, sonKategoriKaydet, sonKategoriAl, planlaHatirlatici, restoreHatirlaticilar, isteyenUyeUstu, SABLONLAR, sablonPlanla, sablonListesi, sablonOneri, discordHata };
+// Niyet ajanına gönderilen KISA şema: 35 aracın tam açıklaması ~14KB edip
+// 4096 ctx'i dolduruyor; model araçları göremez hale gelip halüsinasyon
+// görüyor ("araç bulunmamaktadır", qwen3.5:9b pilotuyla kanıtlandı).
+// Ad + zorunlu alan + tek-cümle özet aynı seçimi çok daha küçük bağlamda
+// yaptırır (num_ctx'e dokunulmaz, VRAM/OOM riski yok). Şekil aynı kalır,
+// sadece description'lar kısalır; argDogrula zaten sunucuda doğrular.
+function kisaAciklama(s, max) {
+  const t = String(s || '').split(/[.!\n]/)[0].trim();
+  return t.length > max ? t.slice(0, max) + '…' : t;
+}
+function toolListesiKisa(acikOp) {
+  return Object.values(KATALOG)
+    .filter(o => !acikOp || acikOp(o))
+    .map(o => {
+      const t = o.tool || {};
+      const p = t.parameters || {};
+      const oz = {};
+      for (const [k, v] of Object.entries(p.properties || {})) {
+        const nv = { type: v.type };
+        if (v.enum) nv.enum = v.enum;
+        if (Number.isFinite(v.maxItems)) nv.maxItems = v.maxItems;
+        if (Number.isFinite(v.minItems)) nv.minItems = v.minItems;
+        if (v.type === 'array' && v.items) nv.items = { type: v.items.type || 'string' };
+        if (v.description) nv.description = kisaAciklama(v.description, 80);
+        oz[k] = nv;
+      }
+      const pk = { type: 'object', properties: oz };
+      if (Array.isArray(p.required)) pk.required = p.required;
+      return { type: 'function', function: { name: t.name, description: kisaAciklama(t.description, 140), parameters: pk } };
+    });
+}
+
+module.exports = { KATALOG, toolListesi, toolListesiKisa, uyeCoz, rolCoz, kanalCoz, kategoriCoz, sonKategoriKaydet, sonKategoriAl, planlaHatirlatici, restoreHatirlaticilar, isteyenUyeUstu, SABLONLAR, sablonPlanla, sablonListesi, sablonOneri, discordHata };

@@ -7,7 +7,7 @@
 const { sanitize } = require('./sanitize');
 const { acikMi } = require('./local');
 const { effectiveAgent, isChatEnabled, agentModelleri, allModels, AGENT_NVIDIA_SIRALI } = require('./ai-models');
-const { KATALOG, toolListesi } = require('./ai-actions');
+const { KATALOG, toolListesiKisa } = require('./ai-actions');
 const { isOpEnabled } = require('./ai-perms');
 
 const NVIDIA_BASE = 'https://integrate.api.nvidia.com/v1';
@@ -100,7 +100,18 @@ function argDogrula(op, args) {
         if (dizi.length >= min) duz[k] = dizi;
       }
     } else {
-      duz[k] = String(v).slice(0, 1500);
+      const hamStr = String(v).slice(0, 1500);
+      // Şemada enum varsa uymayan değer çöpe atılır (örn. tur:'sesli'):
+      // uydurma değer planı kirletmesin, adım elenip not düşülsün.
+      // Büyük-küçük harf toleranslı ('Ses'->'ses' kurtarılır).
+      if (Array.isArray(ozellik[k].enum) && ozellik[k].enum.length) {
+        const es = ozellik[k].enum.includes(hamStr) ? hamStr
+          : ozellik[k].enum.find(e => String(e).toLocaleLowerCase('tr') === hamStr.toLocaleLowerCase('tr'));
+        if (es === undefined) continue;
+        duz[k] = es;
+      } else {
+        duz[k] = hamStr;
+      }
     }
   }
   for (const k of gerekli) {
@@ -157,7 +168,7 @@ function planJson(j) {
 }
 
 async function nativeCozumle(base, model, soru, lang, ayar) {
-  const tools = toolListesi(op => isOpEnabled(op.tool.name, KATALOG));
+  const tools = toolListesiKisa(op => isOpEnabled(op.tool.name, KATALOG));
   if (!tools.length) return { eslesme: false };
   const res = await fetch(`${base}/api/chat`, {
     method: 'POST',
@@ -195,7 +206,7 @@ async function jsonCozumle(base, model, soru, lang, ayar) {
     body: JSON.stringify({
       model,
       messages: [
-        { role: 'system', content: sistemDili(lang) + ` Yönetim isteğiyse SADECE şu JSON'u yaz: {"op":"<${sema}>","args":{...}}. Birden çok işlem varsa {"plan":[{"op":"...","args":{...}}]} yaz (en fazla 10 adım). Yönetim değilse SADECE şunu yaz: {"op":"sohbet"}. Başka hiçbir şey yazma. /no_think` },
+        { role: 'system', content: sistemDili(lang) + ` Yönetim isteğiyse SADECE şu JSON'u yaz: {"op":"<${sema}>","args":{...}}. Birden çok işlem varsa {"plan":[{"op":"...","args":{...}}]} yaz (en fazla 10 adım). args ZORUNLU: her adım tüm zorunlu alanları içermeli (örn. kanal_ac için {"ad":"...","tur":"metin"}); argümanları uydurma, kullanıcı cümlesindeki adları aynen kullan. Yönetim değilse SADECE şunu yaz: {"op":"sohbet"}. Başka hiçbir şey yazma. /no_think` },
         { role: 'user', content: String(soru).slice(0, 2000) },
       ],
       stream: false,
@@ -416,7 +427,7 @@ function nvidiaHedefListesi() {
 
 // NVIDIA native tools yolu (OpenAI-uyumlu).
 async function nvidiaNativeCozumle(hedef, soru, lang, ayar) {
-  const tools = toolListesi(op => isOpEnabled(op.tool.name, KATALOG));
+  const tools = toolListesiKisa(op => isOpEnabled(op.tool.name, KATALOG));
   if (!tools.length) return { eslesme: false };
   const govde = {
     model: hedef.model,
@@ -453,7 +464,7 @@ async function nvidiaJsonCozumle(hedef, soru, lang, ayar) {
   const govde = {
     model: hedef.model,
     messages: [
-      { role: 'system', content: sistemDili(lang) + ` Yönetim isteğiyse SADECE şu JSON'u yaz: {"op":"<${opAdlari}>","args":{...}}. Birden çok işlem varsa {"plan":[{"op":"...","args":{...}}]} yaz (en fazla 10 adım). Yönetim değilse SADECE şunu yaz: {"op":"sohbet"}. Başka hiçbir şey yazma.` },
+      { role: 'system', content: sistemDili(lang) + ` Yönetim isteğiyse SADECE şu JSON'u yaz: {"op":"<${opAdlari}>","args":{...}}. Birden çok işlem varsa {"plan":[{"op":"...","args":{...}}]} yaz (en fazla 10 adım). args ZORUNLU: her adım tüm zorunlu alanları içermeli (örn. kanal_ac için {"ad":"...","tur":"metin"}); argümanları uydurma, kullanıcı cümlesindeki adları aynen kullan. Yönetim değilse SADECE şunu yaz: {"op":"sohbet"}. Başka hiçbir şey yazma.` },
       { role: 'user', content: String(soru).slice(0, 2000) },
     ],
     temperature: 0.1,

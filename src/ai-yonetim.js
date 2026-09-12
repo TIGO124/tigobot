@@ -285,7 +285,11 @@ function kuralEbeveynHam(soru) {
     );
   }
   if (!m) return null;
-  const kelimeler = m[1].trim().split(/\s+/).filter(Boolean);
+  // Dolgu sözcükleri ebeveyn adına sızmasın ("yeni bir AI grubunun" -> "AI").
+  // Yalın "yeni X" bilerek ELLEMEZ: "Yeni Üyeler" gibi gerçek adlarla
+  // ayırt edilemez, ebeveyn çözümü run aşamasında zaten doğrular.
+  const hamYaka = m[1].replace(/^\s*(?:yeni\s+)?(?:bir|tane)\s+/iu, '').trim();
+  const kelimeler = hamYaka.split(/\s+/).filter(Boolean);
   if (!kelimeler.length) return null;
   // Son kelime gönderme zamiriyse (o/bu/şu) tek başına odur; yoksa son 3 kelime addır.
   const son = kelimeler[kelimeler.length - 1].replace(/^["'“”]+|["'“”]+$/gu, '');
@@ -373,6 +377,29 @@ function kuralAdlar(soru) {
   return [...new Set(adlar)].slice(0, KURAL_MAX_ISLEM + 5);
 }
 
+// Kelime-sınırlı eşleşme (Türkçe uyumlu): \b ASCII-dışıdır — 'ç/ş/ğ/ı' gibi
+// harflerde sınır tutmaz, bu yüzden Unicode sınır ([^\p{L}\p{N}_]) kullanılır.
+// Neden gerekli: 'kur' (kurallar), 'ekle' (yemekler/bekleme), 'ac' (macera),
+// 'sil' (asil/silgi/nasıl), 'oda' (oyun_odasi/odak/moda) gibi kökler adların
+// İÇİNDE geçer; substring arama yanlış niyet üretir (yanlış silme / yutan kural).
+function kelimeVar(ham, alter) {
+  try {
+    return new RegExp(`(?:^|[^\\p{L}\\p{N}_])(?:${alter})(?![\\p{L}\\p{N}_])`, 'iu').test(String(ham || ''));
+  } catch { return false; }
+}
+// Silme fiilleri + yaygın çekimler (emir/istek/zarf-fiil). Geçmiş zaman
+// ('sildi') bilerek YOK: rapor cümlesidir, komut değil — ajana bırakılır.
+const SIL_FIIL = 'sil|silin|silip|silerek|silince|siliyor|silecek|kapat|kapatın|kapatin|kapatıp|kapatip|kapatarak|kapatınca|kapatinca|kapatıyor|kapatiyor|kapatacak|kaldır|kaldir|kaldırın|kaldirin|kaldırıp|kaldirip|kaldırarak|kaldirarak|kaldırınca|kaldirinca|delete|deletes|remove|removes';
+// Oluşturma fiilleri + çekimler. 'kur' yalın hali sınırla aranır:
+// 'kural/kurallar/kurye/kurs' eşleşmez (sondaki harf sınırı keser).
+const AC_FIIL = 'aç|ac|açar|acar|açın|acin|açıp|acip|açarak|acarak|açınca|acinca|açıyor|aciyor|açacak|acacak|açmanı|acmani|açmayı|acmayi|açmamı|acmami|açmalı|acmali|açabilir|acabilir|açılır|acilir|açılsın|acilsin|oluştur|olustur|oluşturun|olusturun|oluşturuyor|olusturuyor|oluşturacak|olusturacak|oluşturmanı|olusturmani|oluşturmayı|olusturmayi|kur|kurun|kuruyor|kuracak|kurar|kurmanı|kurmani|kurmayı|kurmayi|ekle|ekleyin|ekliyor|ekleyecek|create|creates|open|opens|make|makes|add|adds';
+// Tür sözcükleri + ad-durum çekimleri. Kısa kökler ('oda', 'chat') sınırla
+// aranır: 'oyun_odasi/odak/moda' kanal sanılmaz.
+// NOT: -u/-ü ile biten belirtme (akuzatif) halleri EN SIK kullanilanlardir
+// (kanalINI, grubUNU); eksikleri sessiz tip-dusmesi yapar, listeyi budama.
+const KANAL_TIP = 'kanal|kanalı|kanali|kanalın|kanalin|kanalını|kanalini|kanala|kanalda|kanaldan|kanalında|kanalinda|kanalından|kanalindan|kanallar|kanalları|kanallari|kanallarını|kanallarini|kanalına|kanalina|oda|odayı|odayi|odası|odasi|odasını|odasini|odasında|odasinda|odalar|odaları|odalari|odada|channel|channels|room|rooms|chat|chats|sohbet\\s*odas\\w*';
+const KAT_TIP = 'kategori|kategorisi|kategorisini|kategorisine|kategorisinde|kategorisinden|kategoriler|kategorileri|kategoriye|grup|grubu|gruba|grubun|grubuna|grubunun|grubunu|grubunda|grubundan|gruplar|grupları|gruplari|gruplarını|gruplarini|grub|group|groups|category|categories|bölüm|bolum|bölümü|bolumu|bölümler|bolumler';
+
 function kuralNiyetler(soru, guild, yerineModu = false) {
   const ham = String(soru || '').toLocaleLowerCase('tr');
   if (!ham.trim()) return [];
@@ -383,7 +410,7 @@ function kuralNiyetler(soru, guild, yerineModu = false) {
   const yerineDuzeltme = hamYerine || yerineModu === true;
   // NOT: "temizle/clear" (mesaj temizliği = mesaj_sil işi) bilerek YOK;
   // kanal silmeyle karışmasın diye ajana bırakılır.
-  const silKokusu = /(sil|kapat|kaldır|kaldir|delete|remove)/i.test(ham);
+  const silKokusu = kelimeVar(ham, SIL_FIIL);
   // Olumsuz emir ("kanalı silme" = silME!) asla silme yapmaz.
   if (/\b(silme|kapatma|silmesene|kapatmasana)\b/i.test(ham)) return [];
   // Değiştirme kalıbı: "GENERAL grubunu sil ve onun yerine SOHBET22 grubunu aç"
@@ -394,13 +421,13 @@ function kuralNiyetler(soru, guild, yerineModu = false) {
     const sol = parcalarY[0] || '';
     const sag = parcalarY.slice(1).join(' ');
     const solAlt = sol.toLocaleLowerCase('tr');
-    const solSil = /(sil|kapat|kaldır|kaldir|delete|remove)/i.test(solAlt)
+    const solSil = kelimeVar(solAlt, SIL_FIIL)
       && !/\b(silme|kapatma|silmesene|kapatmasana)\b/i.test(sol)
       && !/(silmek|kapatmak|kaldırmak|deleting)/i.test(solAlt);
-    const sagAc = /(aç|ac|oluştur|olustur|create|open|make|add|kur|ekle)/i.test(sag.toLocaleLowerCase('tr'));
+    const sagAc = kelimeVar(sag.toLocaleLowerCase('tr'), AC_FIIL);
     if (solSil && sagAc) {
-      const solKanalMi = /(kanal|oda|channel|room|chat|sohbet\s*odas)/i.test(sol);
-      const solKategoriMi = /(kategori|category|categories|grup|grub|group|bölüm|bolum)/i.test(sol);
+      const solKanalMi = kelimeVar(sol, KANAL_TIP);
+      const solKategoriMi = kelimeVar(sol, KAT_TIP);
       const silAdlar = kuralAdlar(sol);
       const sagNiyetler = kuralNiyetler(sag, guild, true);
       if (!silAdlar.length) return sagNiyetler;
@@ -408,12 +435,21 @@ function kuralNiyetler(soru, guild, yerineModu = false) {
       return [...silAdlar.map(ad => ({ op: silOp, args: { ad } })), ...sagNiyetler];
     }
   }
+  // Karma istek: hem silme hem oluşturma fiili var, "yerine" yok
+  // ("X kanallarını silip yeni bir AI grubu aç, içine AI1, AI2 ekle").
+  // Saf silme dalına düşerse kuralAdlar'daki "içine/altına" budaması silinecek
+  // listeyi uçurup OLUŞTURULACAK adları silinecek sanır
+  // (AI1/AI2'yi silmeye kalkar). Yanlış silme ASLA dönme, ajana bırak
+  // (ajan 10 adıma kadar kategori_ac + kanal_ac + kanal_sil planı kurar).
+  if (!yerineDuzeltme && silKokusu && kelimeVar(ham, AC_FIIL)) {
+    return [];
+  }
   // Silme dalı: deterministik kural (ajan yokken de çalışır).
   // Mastar kip ("silmek istiyorum") varsayım değil; ajana bırak.
   if (silKokusu && !yerineDuzeltme) {
     if (/(silmek|kapatmak|kaldırmak|deleting)/i.test(ham)) return [];
-    const kanalMiS = /(kanal|oda|channel|room|chat|sohbet\s*odas)/i.test(ham);
-    const kategoriMiS = /(kategori|category|categories|grup|grub|group|bölüm|bolum)/i.test(ham);
+    const kanalMiS = kelimeVar(ham, KANAL_TIP);
+    const kategoriMiS = kelimeVar(ham, KAT_TIP);
     const adlarS = kuralAdlar(soru);
     if (!adlarS.length) return [];
     // Kategori sözü geçiyorsa kategori, yoksa kanal (kanal_sil kategoriyi reddeder).
@@ -421,18 +457,22 @@ function kuralNiyetler(soru, guild, yerineModu = false) {
     return adlarS.map(ad => ({ op: 'kanal_sil', args: { ad } }));
   }
   // Silme/kapatma kokuyorsa ASLA oluşturma yapma (düzeltme hariç)
-  if (!yerineDuzeltme && /(sil|kapat|kaldır|kaldir|delete|remove|temizle|clear)/i.test(ham)) return [];
+  // 'temizleyip/temizleyerek' zarf-fiilleri de mesaj-temizligi ailesidir (ajana birakilir).
+  if (!yerineDuzeltme && kelimeVar(ham, `${SIL_FIIL}|temizle|temizleyin|temizliyor|temizlenecek|temizleyip|temizleyerek|clear`)) return [];
   // Sayaç/anket/hatırlatıcı "kur" fiiliyle gelir; kanal sanılıp yanlış işlem yapılmasın
   if (/(sayaç|sayac|counter|anket|poll|oylama|hatırlat|hatirlat|remind)/i.test(ham)) return [];
   // Mastar kip ("açmayı düşünüyorum") varsayım değil; ajana bırak
   if (/(açmak|açmayı|oluşturmak|oluşturmayı|opening)/i.test(ham)) return [];
-  // 'aç' alt-dizgisi tuzağı: kaç/araç/bekle/saç/sıcak/açlık yönetim değildir.
-  // [] dönmek güvenlidir (ajan yedeği devralır, yanlış kanal açılmaz).
-  if (/(kaç|kac|ara[cç]|bekle|sa[cç]|sıcak|sicak|a[cç]lık|ka[cç]ın)/i.test(ham)) return [];
-  if (!/(aç|ac|oluştur|olustur|create|open|make|add|kur|ekle)/i.test(ham)) return [];
-  const kanalMi = /(kanal|oda|channel|room|chat|sohbet\s*odas)/i.test(ham);
-  // 'grub' ayrıca: grup->grubu/gruba yumuşamasında 'grup' tutmaz!
-  const kategoriMi = /(kategori|category|categories|grup|grub|group|bölüm|bolum)/i.test(ham);
+  // Miktar/kaçınma tuzağı: 'kaç/birkaç' (sayı belirsiz) ve 'kaçın' (sakın)
+  // ile kanal açılmaz; ajana bırakılır.
+  // NOT: 'araç/bekle/saç' BURADA YOK — kelimeVar(AC_FIIL) sınırla aradığı için
+  // 'bekleme odası / araç / saç' gibi gerçek adlar artık tuzağa düşmez
+  // (eski substring 'aç/ekle' araması onları yutuyordu).
+  if (/(kaç|kac|sıcak|sicak|a[cç]lık|ka[cç]ın)/i.test(ham)) return [];
+  if (!kelimeVar(ham, AC_FIIL)) return [];
+  const kanalMi = kelimeVar(ham, KANAL_TIP);
+  // 'grub' ayrıca listede: grup->grubu/gruba yumuşamasında çekimler açık yazılır.
+  const kategoriMi = kelimeVar(ham, KAT_TIP);
   // Düzeltmede tür adı düşer ("onun yerine yonetim1, yonetim2 aç"):
   // bağlam kanal olduğu için türsüz girdiyi kanal say (ajana bırakıp
   // tekil "Kanal bulunamadı" hatası vermekten iyidir).

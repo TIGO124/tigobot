@@ -129,6 +129,77 @@ try {
   }
 } catch (e) { fail('KATALOG: ' + e.message); }
 
+// 7) NLU kural regresyon (altın küme, ~240 vaka, senkron <1sn).
+// Kaynak: temp harness (11.414 vaka) + tigobot-tr-nlu-regression skill.
+// Kural motoru deterministiktir; bu küme gelecekteki fiil/tür/ebeveyn
+// regresyonlarını (yanlış silme dahil) anında yakalar.
+try {
+  const { kuralNiyetler } = require('./ai-yonetim');
+  const nnorm = (s) => String(s || '').toLocaleLowerCase('tr').replace(/[^\p{L}\p{N}_]/gu, '');
+  let nluHata = 0;
+  const nluDene = (girdi, bekle) => {
+    let alinan = null;
+    try { alinan = kuralNiyetler(girdi, null); }
+    catch (e) { nluHata++; fail(`nlu throw: ${girdi} (${e.message})`); return; }
+    const ozet = JSON.stringify((alinan || []).map((o) => `${o.op}:${(o.args && (o.args.ad || o.args.ebeveyn)) || ''}`));
+    if (bekle === 'bos') {
+      if (!Array.isArray(alinan) || alinan.length !== 0) { nluHata++; fail(`nlu bos-degil: ${girdi} -> ${ozet}`); }
+      return;
+    }
+    // bekle: [[op, adNorm], ...] (+opsiyonel {eb: parentNorm} son eleman özelliği)
+    const got = (alinan || []).map((o) => [o.op, nnorm(o.args && o.args.ad), nnorm(o.args && o.args.ebeveyn)]);
+    if (got.length !== bekle.length) { nluHata++; fail(`nlu sayi: ${girdi} beklenen=${bekle.length} alinan=${ozet}`); return; }
+    for (let i = 0; i < bekle.length; i++) {
+      const [eop, ead, eeb] = bekle[i];
+      if (got[i][0] !== eop || got[i][1] !== ead || (eeb !== undefined && got[i][2] !== eeb)) {
+        nluHata++; fail(`nlu uyusmazlik: ${girdi} beklenen=${JSON.stringify(bekle)} alinan=${ozet}`); return;
+      }
+    }
+  };
+  // 7a) Kritik altın vakalar (rapor cümlesi dahil)
+  nluDene('tigobot senden sohbet1, sohbet2, sohbet, uyarılar1, uyarılar2 kanalını silip yeni bir AI grubu açmanı istiyorum, bu grubun içine AI1 ve aisohbet metin kanallarını ekle', 'bos');
+  nluDene('eski1 ve eski2 kanallarını silip yeni bir OYUN grubu aç', 'bos');
+  nluDene('GENEL grubunu sil ve onun yerine SOHBET grubunu aç', [['kategori_sil', 'genel'], ['kategori_ac', 'sohbet']]);
+  nluDene('eski_duyuru kanalını sil ve onun yerine yeni_duyuru kanalını aç', [['kanal_sil', 'eski_duyuru'], ['kanal_ac', 'yeni_duyuru']]);
+  nluDene('kurallar kanalını sil', [['kanal_sil', 'kurallar']]);
+  nluDene('oyun_odasi grubunu sil', [['kategori_sil', 'oyun_odasi']]);
+  nluDene('yemekler kanalını sil', [['kanal_sil', 'yemekler']]);
+  nluDene('macera kanalını aç', [['kanal_ac', 'macera']]);
+  nluDene('bekleme odası aç', [['kanal_ac', 'bekleme']]);
+  nluDene('asil kanalını aç', [['kanal_ac', 'asil']]);
+  nluDene('silgi kanalını aç', [['kanal_ac', 'silgi']]);
+  nluDene('odak grubunu sil', [['kategori_sil', 'odak']]);
+  nluDene('moda grubunu sil', [['kategori_sil', 'moda']]);
+  nluDene('duyuru kanalını aç', [['kanal_ac', 'duyuru']]);
+  nluDene('EGLENCE grubunu aç', [['kategori_ac', 'eglence']]);
+  nluDene('EGLENCE grubunun altına AI1 ve AI2 kanallarını aç', [['kanal_ac', 'aı1', 'eglence'], ['kanal_ac', 'aı2', 'eglence']]);
+  nluDene('yeni bir AI grubunun altına genel kanallarını aç', [['kanal_ac', 'genel', 'aı']]);
+  nluDene('yonetim1 den yonetim5 e kadar kanal aç', [['kanal_ac', 'yonetim1'], ['kanal_ac', 'yonetim2'], ['kanal_ac', 'yonetim3'], ['kanal_ac', 'yonetim4'], ['kanal_ac', 'yonetim5']]);
+  nluDene('sohbet kanalını silme lütfen', 'bos');
+  nluDene('yeni kanal açmayı düşünüyorum', 'bos');
+  nluDene('kaç kanal var', 'bos');
+  nluDene('sayaç kur', 'bos');
+  nluDene('anket aç', 'bos');
+  nluDene('bana bilgi ver', 'bos');
+  nluDene('"sohbet odası" kanalını aç', [['kanal_ac', 'sohbetodası']]);
+  // 7b) Üretim matrisi (deterministik)
+  const ADLAR = ['sohbet1', 'duyuru', 'kurallar', 'oyun_odasi', 'bilgi', 'müzik'];
+  const SILF = ['sil', 'kapat', 'kaldır'];
+  const ACF = ['aç', 'oluştur', 'kur'];
+  for (const a of ADLAR) {
+    for (const f of SILF) nluDene(`${a} kanalını ${f}`, [['kanal_sil', nnorm(a)]]);
+    for (const f of SILF) nluDene(`${a} grubunu ${f}`, [['kategori_sil', nnorm(a)]]);
+    for (const f of ACF) nluDene(`${a} kanalını ${f}`, [['kanal_ac', nnorm(a)]]);
+    for (const f of ACF) nluDene(`${a} grubunu ${f}`, [['kategori_ac', nnorm(a)]]);
+  }
+  for (const a of ['kurallar', 'yemekler', 'bekleme']) nluDene(`${a} kanalını silip yeni bir X grubu aç`, 'bos');
+  for (const p of ['EGLENCE', 'OYUN', 'AI']) {
+    nluDene(`${p} grubuna AI1 kanallarını aç`, [['kanal_ac', nnorm('AI1'), nnorm(p)]]);
+    nluDene(`yeni bir ${p} grubunun altına AI1 kanallarını aç`, [['kanal_ac', nnorm('AI1'), nnorm(p)]]);
+  }
+  if (nluHata) console.error(`SELFTEST NLU: ${nluHata} altın vaka tutmadı (üstte).`);
+} catch (e) { fail('nlu regresyon: ' + e.message); }
+
 if (hata) {
   console.error(`SELFTEST: ${hata} hata bulundu.`);
   process.exitCode = 1;
