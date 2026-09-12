@@ -130,15 +130,60 @@ const KURAL_STOP = new Set((
   'yeni bir tane adlı adında isimli lütfen lutfen bana bize seni sizi onu bunu şunu' +
   ' senden benden bizden sizden ondan bundan için icin sunucuya sunucuda ve ile' +
   ' şimdi simdi şimdide simdide şimdiki hadi bakalım bakim istiyorum istiyorsun istiyoruz istiyom' +
-  ' aç açar oluştur olustur create kur ekle kategori kategorisi kategori grup grubu gruba grubuna' +
+  ' aç ac açar acar oluştur olustur create kur ekle kategori kategorisi kategori grup grubu gruba grubuna' +
   ' kanalı kanali kanal kanalını kanalına kanalında kanallar kanalları kanallarını kanallarına' +
   ' channels oda odası odayı odasını metin ses sesli yazılı yazili' +
   ' altına altina içine icine grubun grubunun kategorinin kategorisinin diye olarak şekilde' +
-  ' açmanı açmayı açmamı yapmanı yapmayı yapmamı kurmanı oluşturmanı olusturmani' +
-  ' açabilir açarmısın açarmisin yapar mısın misin musun müsün mı mi mu mü' +
- ' de da ki yi yı yu yü ye ya sırasıyla sirasıyla sırayla sirayla sırası sırasıyle tekrar yeniden düzelt duzelt yanlış yanlis yapmamışsın yapmamissin tigobot bot new a an the please server open make add to into under' +
- ' oraya buraya şuraya su bu o şu'
+  ' açmanı acmani açmayı acmayi açmamı acmami yapmanı yapmayı yapmamı kurmanı oluşturmanı olusturmani' +
+  ' açabilir acabilir açarmısın acarmisin yapar mısın misin musun müsün mı mi mu mü' +
+  ' de da ki yi yı yu yü ye ya sırasıyla sirasıyla sırayla sirayla sırası sırasıyle tekrar yeniden düzelt duzelt yanlış yanlis yapmamışsın yapmamissin tigobot bot new a an the please server open make add to into under' +
+  ' oraya buraya şuraya su bu o şu' +
+  // Aralık/düzeltme artıkları: isme sızmamalı ("1 den 5 e kadar" -> den/kadar ad olmasın)
+  ' den dan ten tan kadar arası arasi arasında arasinda hayır hayir yerine onu onun ondan bunu sunu şunu msil msin'
 ).split(/\s+/).filter(Boolean));
+
+// "yonetim1 den yonetim 5 e kadar" / "yonetim 1-5" gibi aralıkları genişletir.
+// Dönüş: ['yonetim1',...,'yonetim5'] ya da null (aralık yoksa).
+// Kötüye kullanımı frenlemek için en fazla 10'lu aralık kabul edilir
+// (üst sınır KURAL_MAX_ISLEM ile yonetimAkis'te uygulanır, fazlası "atlandı" notu alır).
+function kuralAralikAdlar(metin) {
+  const s = String(metin || '');
+  // 1) "... den/dan ... (ye/ya/e/a) kadar" kalıbı
+  let m = s.match(
+    /([\p{L}_-]{2,})\s*(\d{1,3})\s*['’ʼ]?\s*(?:den|dan|ten|tan)\s+([\p{L}_-]{2,})?\s*(\d{1,3})\s*['’ʼ]?\s*(?:ye|ya|yene|yana|e|a)?\s*(?:e\s+|a\s+)?kadar/iu
+  );
+  let prefix1 = null; let n1 = null; let n2 = null;
+  if (m) {
+    prefix1 = (m[1] || '').trim();
+    n1 = parseInt(m[2], 10);
+    const prefix2 = (m[3] || '').trim();
+    n2 = parseInt(m[4], 10);
+    // İkinci önek varsa ve farklıysa aralık değildir ("elma1 den armut5 e kadar")
+    if (prefix2 && prefix1.toLocaleLowerCase('tr') !== prefix2.toLocaleLowerCase('tr')) return null;
+  } else {
+    // 2) Kısa çizgi kalıbı: "yonetim1-5" / "yonetim 1 - 5" / "yonetim1-yonetim5"
+    m = s.match(
+      /([\p{L}_-]{2,})\s*(\d{1,3})\s*[-–—]\s*(?:([\p{L}_-]{2,})\s*)?(\d{1,3})\b/iu
+    );
+    if (!m) return null;
+    prefix1 = (m[1] || '').trim();
+    n1 = parseInt(m[2], 10);
+    const prefix2 = (m[3] || '').trim();
+    n2 = parseInt(m[4], 10);
+    if (prefix2 && prefix1.toLocaleLowerCase('tr') !== prefix2.toLocaleLowerCase('tr')) return null;
+  }
+  if (!prefix1 || !Number.isFinite(n1) || !Number.isFinite(n2)) return null;
+  if (n1 >= n2) return null;
+  // Çok büyük aralık istismara/kazaya açıktır ("1 den 100 e kadar"):
+  // ilk 10'luğa kırpılır, üst sınır (KURAL_MAX_ISLEM) yonetimAkis'te
+  // "atlandı" notuyla uygulanır. Böylece çöp tekil ad üretilmez.
+  if (n2 - n1 + 1 > 10) n2 = n1 + 9;
+  const taban = prefix1.toLocaleLowerCase('tr');
+  if (taban.length < 2) return null;
+  const out = [];
+  for (let i = n1; i <= n2; i++) out.push(`${taban}${i}`);
+  return out;
+}
 
 // "X grubunun/kategorisinin altına" VEYA "X grubuna/kategorisine" kalıbından X'i çıkarır.
 // Öndeki zarflar atılır: "şimdi de o grubun altına" -> "o", "şimdi bu gruba X aç" -> "bu".
@@ -186,12 +231,29 @@ function kuralAdlar(soru) {
   let ham = String(soru || '');
   // Baştaki bot hitabı atılır ("tigobot ...", "<@id> ...")
   ham = ham.replace(/^\s*(<@!?\d+>\s*|tigobot\b[,.!:\s]*)/iu, '').trim();
-  const tirnak = ham.match(/["'“”]([^"'“”]{2,90})["'“”]/u);
+  // Tırnaklı tek ad ("\"sohbet odası\" aç") önceliklidir.
+  // NOT: Türkçe kesme işareti tırnak değildir ("duyuru1'den duyuru3'e"):
+  // tek tırnak ancak kelime-dışı komşularla gelirse tırnak sayılır,
+  // yoksa "den duyuru3" gibi çöp ad üretiliyordu.
+  let tirnak = ham.match(/["“”]([^"'“”]{2,90})["“”]/u);
+  if (!tirnak) {
+    const tek = ham.match(/(?:^|[\s:;,(\[])'([^'\n]{2,90})'(?=[\s:;,.)!\]?]|$)/u);
+    if (tek) tirnak = tek;
+  }
   if (tirnak && tirnak[1].trim()) return [tirnak[1].trim()];
+  // Düzeltme kalıbı: "onu sil onun yerine X aç" -> sadece X tarafı ad olur.
+  // ("yerine" öncesi silme pismanlığıdır, oluşturma adını kirletmesin.)
+  if (/yerine|instead/iu.test(ham)) ham = String(ham.split(/yerine|instead/iu).pop() || '').trim();
   // Ebeveyn cümleciğini at ("o grubun altına" / "bu gruba" kısımdaki isim adaya karışmasın)
   const govde = ham
     .replace(/^[\s\S]*?(?:altına|altina|içine|icine|into|under)\s+/iu, '')
     .replace(/^[\s\S]*?\b(?:gruba|grubuna|kategoriye|kategorisine|group\s+to)\b\s+/iu, '');
+  // Aralık önce: "yonetim1 den yonetim 5 e kadar" -> 5 ayrı ad.
+  // (Normal kelime-bölme bu girdiyi tek ad yapıştırıyordu: "yonetim1-den-yonetim5".)
+  try {
+    const aralik = kuralAralikAdlar(govde);
+    if (aralik && aralik.length) return [...new Set(aralik)].slice(0, KURAL_MAX_ISLEM + 5);
+  } catch {}
   const parcalar = govde.split(/[,;]+|\s+ve\s+|\s+ile\s+|\s*\+\s*/iu).map(s => s.trim()).filter(Boolean);
   const adlar = [];
   for (let p of parcalar) {
@@ -226,22 +288,29 @@ function kuralAdlar(soru) {
 function kuralNiyetler(soru, guild) {
   const ham = String(soru || '').toLocaleLowerCase('tr');
   if (!ham.trim()) return [];
-  // Silme/kapatma kokuyorsa ASLA oluşturma yapma
-  if (/(sil|kapat|kaldır|kaldir|delete|remove|temizle|clear)/i.test(ham)) return [];
+  // "onu sil onun yerine X aç" düzeltmesi oluşturmadır; silme guard'ına takılmasın.
+  // (Ad çıkarımı "yerine" sonrasını kullanır, silinen taraf ajana bile gitmez.)
+  const yerineDuzeltme = /yerine|instead/i.test(ham);
+  // Silme/kapatma kokuyorsa ASLA oluşturma yapma (düzeltme hariç)
+  if (!yerineDuzeltme && /(sil|kapat|kaldır|kaldir|delete|remove|temizle|clear)/i.test(ham)) return [];
   // Sayaç/anket/hatırlatıcı "kur" fiiliyle gelir; kanal sanılıp yanlış işlem yapılmasın
   if (/(sayaç|sayac|counter|anket|poll|oylama|hatırlat|hatirlat|remind)/i.test(ham)) return [];
   // Mastar kip ("açmayı düşünüyorum") varsayım değil; ajana bırak
   if (/(açmak|açmayı|oluşturmak|oluşturmayı|opening)/i.test(ham)) return [];
-  if (!/(aç|oluştur|olustur|create|open|make|add|kur|ekle)/i.test(ham)) return [];
+  if (!/(aç|ac|oluştur|olustur|create|open|make|add|kur|ekle)/i.test(ham)) return [];
   const kanalMi = /(kanal|oda|channel|room|chat|sohbet\s*odas)/i.test(ham);
   // 'grub' ayrıca: grup->grubu/gruba yumuşamasında 'grup' tutmaz!
   const kategoriMi = /(kategori|category|categories|grup|grub|group|bölüm|bolum)/i.test(ham);
-  if (!kanalMi && !kategoriMi) return [];
+  // Düzeltmede tür adı düşer ("onun yerine yonetim1, yonetim2 aç"):
+  // bağlam kanal olduğu için türsüz girdiyi kanal say (ajana bırakıp
+  // tekil "Kanal bulunamadı" hatası vermekten iyidir).
+  const kanalVarsay = yerineDuzeltme && !kanalMi && !kategoriMi;
+  if (!kanalMi && !kategoriMi && !kanalVarsay) return [];
   const adlar = kuralAdlar(soru);
   if (!adlar.length) return [];
   const tur = /(ses|voice)/i.test(ham) ? 'ses' : 'metin';
   // "kanal/oda" geçiyorsa kanal (GENERAL kanalı), yoksa kategori (GENERAL grubu)
-  if (kanalMi) {
+  if (kanalMi || kanalVarsay) {
     const ebAd = kuralEbeveynAd(guild, kuralEbeveynHam(soru));
     return adlar.map(ad => ({ op: 'kanal_ac', args: ebAd ? { ad, tur, ebeveyn: ebAd } : { ad, tur } }));
   }
@@ -381,4 +450,4 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
   }
 }
 
-module.exports = { yonetimAkis, bekleyenAl, opAdi, denetim, yonetimBenzeriMi, kuralNiyetler, kuralEbeveynHam, kuralAdlar, KURAL_MAX_ISLEM, sonDenemeAl };
+module.exports = { yonetimAkis, bekleyenAl, opAdi, denetim, yonetimBenzeriMi, kuralNiyetler, kuralEbeveynHam, kuralAdlar, kuralAralikAdlar, KURAL_MAX_ISLEM, sonDenemeAl };
