@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { t, getLang } = require('../i18n');
 const { yerelHazirMi } = require('../ai');
 const { getStats } = require('../stats');
+const { effectiveAgent } = require('../ai-models');
 
 const NAMES = { tr: 'durum', en: 'status' };
 
@@ -41,6 +42,8 @@ function build(lang) {
         { name: t(L, 'status.f.local'), value: yerelMetin, inline: true },
         { name: t(L, 'status.f.nvidia'), value: nvidiaKey ? t(L, 'status.nvidia.on') : t(L, 'status.nvidia.off'), inline: true },
         { name: t(L, 'status.f.uptime'), value: st.uptime, inline: true },
+        { name: t(L, 'status.f.agent'), value: effectiveAgent(interaction.guildId).key, inline: true },
+        { name: t(L, 'status.f.kod'), value: st.kod || '?', inline: true },
       )
       .setTimestamp();
     await interaction.editReply({ embeds: [embed] });

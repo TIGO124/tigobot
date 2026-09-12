@@ -1,4 +1,6 @@
 // Ortak sistem istatistikleri (durum komutu + dashboard API birlikte kullanır).
+// kod: çalışan sürüm (şema v + Railway commit). Hangi kodun canlı olduğunu
+// anlamak için (/durum, panel) — deploy takibini kör uçuştan çıkarır.
 function formatUptime(sn) {
   sn = Math.floor(sn || 0);
   const g = Math.floor(sn / 86400);
@@ -11,6 +13,13 @@ function formatUptime(sn) {
   if (d > 0 || s > 0 || g > 0) parca.push(`${d}d`);
   parca.push(`${k}sn`);
   return parca.join(' ');
+}
+
+function kodSurumu() {
+  let sema = '?';
+  try { sema = String(require('./schema').CODE_VERSION); } catch {}
+  const sha = String(process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7) || 'local';
+  return `v${sema}-${sha}`;
 }
 
 function formatMem(bytes) {
@@ -37,6 +46,7 @@ function getStats(client) {
     commands: client && client.commands ? client.commands.size : 0,
     node: process.version,
     ping: client && client.ws ? Math.round(client.ws.ping) : -1,
+    kod: kodSurumu(),
     startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
   };
 }
