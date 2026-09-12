@@ -27,6 +27,15 @@ function build(lang) {
     // Kullanıcının kendi yönetim yetkisi: ret yerse nedenini burada görür.
     let yetkiMetin = '?';
     try { yetkiMetin = require('../ai-perms').yetkiMetni(interaction.user, interaction.member, interaction.guild, L); } catch {}
+    // Son yönetim denemesi: takılma noktası teşhisi (sahip/tester görür).
+    let sonDeneme = '-';
+    try {
+      const d = require('../ai-yonetim').sonDenemeAl(interaction.guildId);
+      if (d && d.t) {
+        const saat = new Date(d.t).toLocaleTimeString('tr', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        sonDeneme = `${saat} • ${d.asama}${d.op ? ' • ' + d.op : ''}`;
+      }
+    } catch {}
     const st = getStats(interaction.client);
     // Yerel kapalıysa SEBEBİ yazılır: adres yok mu, tünel mi kapalı, /local mı kapalı?
     let yerelMetin;
@@ -50,6 +59,7 @@ function build(lang) {
         { name: t(L, 'status.f.agent'), value: effectiveAgent(interaction.guildId).key, inline: true },
         { name: t(L, 'status.f.search'), value: aramaAcik ? t(L, 'status.search.on') : t(L, 'status.search.off'), inline: true },
         { name: t(L, 'status.f.yetki'), value: yetkiMetin, inline: false },
+        { name: t(L, 'status.f.sondeneme'), value: sonDeneme, inline: false },
         { name: t(L, 'status.f.kod'), value: st.kod || '?', inline: true },
       )
       .setTimestamp();

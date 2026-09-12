@@ -340,7 +340,9 @@ async function nvidiaNativeCozumle(hedef, soru, lang, ayar) {
       { role: 'user', content: String(soru).slice(0, 1000) },
     ],
     temperature: 0.2,
-    max_tokens: 512,
+    // Akıl-yürütmeli modeller (gpt-oss vb.) düşünme token'ını buradan yer;
+    // dar bütçe tool çağrısını kesip "eşleşme yok" izlenimi veriyordu.
+    max_tokens: 1024,
     tools,
     tool_choice: 'auto',
   };
@@ -379,7 +381,7 @@ async function nvidiaJsonCozumle(hedef, soru, lang, ayar) {
       { role: 'user', content: String(soru).slice(0, 1000) },
     ],
     temperature: 0.1,
-    max_tokens: 256,
+    max_tokens: 512,
     response_format: { type: 'json_object' },
   };
   if (hedef.thinkingOff) govde.reasoning_effort = 'none';

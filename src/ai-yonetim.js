@@ -88,7 +88,9 @@ async function onaySor(gonder, ctx, op, args) {
 // Yönetim fiili çağrıştıran kelimeler (sadece HATA yolunda kullanılır:
 // niyet çözümleme patlarsa ve soru buna benziyorsa sessiz sohbete düşmek
 // yerine kısa hata gösterilir).
-const YONETIM_KELIME = ['kanal', 'kategori', 'grup', 'rol', 'rütbe', 'rutbe', 'sustur', 'timeout', 'mute', 'yasakla', 'ban', 'kick', 'uyar', 'warn', 'sayaç', 'sayac', 'counter', 'anket', 'poll', 'oylama', 'hatırlat', 'hatirlat', 'remind', 'oluştur', 'olustur', 'create', 'channel', 'category', 'group', 'role', 'delete', 'clear', 'temizle', 'sil'];
+// NOT: 'grub' ayrıca yazılır; Türkçe ünsüz yumuşamasıyla grup->grubu/gruba
+// olur ve 'grup' alt-dizgisi TUTMAZ ("grubu".includes("grup") === false)!
+const YONETIM_KELIME = ['kanal', 'kategori', 'grup', 'grub', 'rol', 'rütbe', 'rutbe', 'sustur', 'timeout', 'mute', 'yasakla', 'ban', 'kick', 'uyar', 'warn', 'sayaç', 'sayac', 'counter', 'anket', 'poll', 'oylama', 'hatırlat', 'hatirlat', 'remind', 'oluştur', 'olustur', 'create', 'channel', 'category', 'group', 'role', 'delete', 'clear', 'temizle', 'sil'];
 
 // Kısa anahtarlarla çakışan sıradan kelimeler (bana->ban, kontrol->rol):
 // bunlar ayıklanır, kalan metinde arama yapılır.
@@ -103,6 +105,69 @@ function yonetimBenzeriMi(soru) {
 
 function iz(neden, ctx, ekstra) {
   try { console.log(`AI-YONETIM-IZ ${ctx.guild && ctx.guild.id}/${ctx.user && ctx.user.tag} ${neden}${ekstra ? ' ' + String(ekstra).slice(0, 160) : ''}`); } catch {}
+}
+
+// Son yönetim denemesi (teşhis için): guildId -> { t, asama, op }.
+// /durum "Son deneme" alanından okunur; hangi aşamada takıldığı anlaşılır.
+const sonDenemeler = new Map();
+function denemeKaydet(guildId, asama, op) {
+  try {
+    if (!guildId) return;
+    sonDenemeler.set(guildId, { t: Date.now(), asama: String(asama || '?'), op: op || null });
+    if (sonDenemeler.size > 200) sonDenemeler.delete(sonDenemeler.keys().next().value);
+  } catch {}
+}
+function sonDenemeAl(guildId) {
+  try { return sonDenemeler.get(guildId) || null; } catch { return null; }
+}
+
+// Kural-tabanlı yedek niyet: ajan ıskalarsa ("GENERAL grubu aç" gibi açık
+// durumlarda) deterministik eşleştirme yapar. SADECE düşük-riskli oluşturma
+// işlemleri (kategori_ac, kanal_ac); karmaşık/şüpheli girdilerde null
+// dönüp normal akışa (sohbet+not) bırakır.
+const KURAL_STOP = new Set((
+  'yeni bir tane adlı adında isimli lütfen bana bize için icin sunucuya sunucuda ve ile' +
+  ' aç açar oluştur olustur create kur ekle kategori kategorisi kategori grup grubu gruba' +
+  ' kanalı kanali kanal oraya buraya şuraya su bu o new a an the please server please'
+).split(/\s+/));
+
+function kuralAdCikar(soru) {
+  const ham = String(soru || '');
+  // 1) Tırnak içi: "Sohbet" adında kanal aç
+  let m = ham.match(/["'“”]([^"'“”]{2,90})["'“”]/u);
+  if (m) return m[1].trim();
+  // 2) BÜYÜK HARFLİ token: GENERAL grubu aç
+  m = ham.match(/\b[A-ZÇĞİÖŞÜ0-9]{2,}\b/u);
+  if (m) return m[0];
+  // 3) Stopword temizliği sonrası kalan: genel sohbet kanalı aç -> "genel sohbet"
+  const kalan = ham.toLocaleLowerCase('tr').split(/[^\p{L}\p{N}]+/u)
+    .filter(w => w.length >= 2 && !KURAL_STOP.has(w));
+  if (!kalan.length) return null;
+  return kalan.slice(0, 3).join(' ');
+}
+
+function kuralNiyet(soru) {
+  const ham = String(soru || '').toLocaleLowerCase('tr');
+  if (!ham.trim()) return null;
+  // Silme/kapatma kokuyorsa ASLA oluşturma yapma (ajan varken kural karışmasın)
+  if (/(sil|kapat|kaldır|kaldir|delete|remove|temizle|clear)/i.test(ham)) return null;
+  // Sayaç/anket/hatırlatıcı "kur" fiiliyle gelir; kanal sanılıp yanlış işlem yapılmasın
+  if (/(sayaç|sayac|counter|anket|poll|oylama|hatırlat|hatirlat|remind)/i.test(ham)) return null;
+  const olusturma = /(aç|oluştur|olustur|create|open|make|add|kur|ekle)/i.test(ham);
+  if (!olusturma) return null;
+  const ad = kuralAdCikar(soru);
+  if (!ad) return null;
+  // "kanal/oda" geçiyorsa kanal (tür: ses geçiyorsa ses), yoksa kategori.
+  // ("GENERAL kanalı" -> kanal; "GENERAL grubu" -> kategori)
+  if (/(kanal|oda|channel|room|chat|sohbet\s*odas)/i.test(ham)) {
+    const tur = /(ses|voice)/i.test(ham) ? 'ses' : 'metin';
+    return { op: 'kanal_ac', args: { ad, tur } };
+  }
+  // 'grub' ayrıca: grup->grubu/gruba yumuşamasında 'grup' tutmaz!
+  if (/(kategori|category|categories|grup|grub|group|bölüm|bolum)/i.test(ham)) {
+    return { op: 'kategori_ac', args: { ad } };
+  }
+  return null;
 }
 
 // ctx: { guild, channel, member, user, lang }
@@ -131,6 +196,7 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
       try {
         iz('yetkisiz', ctx, `uid=${ctx.user && ctx.user.id} owner=${ctx.guild && ctx.guild.ownerId} kim=${perms.getKim(ctx.guild.id)}`);
       } catch { iz('yetkisiz', ctx); }
+      try { denemeKaydet(ctx.guild.id, 'yetkisiz'); } catch {}
       not('yetkisiz');
       return false;
     }
@@ -143,6 +209,7 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
       const yedekBilgi = sanitize(String((e && e.yedekHata) || '')).slice(0, 200);
       if (e && e.code === 'LOCAL_UNREACHABLE' || /LOCAL_UNREACHABLE|fetch failed|timeout/i.test(msg)) {
         iz('yerel-erisilemiyor', ctx, msg);
+        try { denemeKaydet(ctx.guild.id, 'yerel-erisilemiyor'); } catch {}
         await gonder({ content: t(L, 'mg.yerelKapali', { teknik: yedekBilgi || '?' }) }).catch(() => {});
         return true;
       }
@@ -175,9 +242,29 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
       // Yönetime benzemiyor -> temiz sohbet (not YOK, model özgür).
       return false;
     }
-    // Yönetime benziyor ama ajan eşleştiremedi -> sohbete düşerken not bırak:
-    // model "nasıl yapılır"ı başka botların komutlarıyla uydurmasın.
-    if (!niyet || !niyet.op) { iz('eslesme-yok', ctx, soru); not('anlasilamadi'); return false; }
+    // Yönetime benziyor ama ajan eşleştiremedi -> önce kural yedeği dene
+    // ("GENERAL grubu aç" gibi açık durumlarda ajana muhtaç kalma).
+    // Kural tutmazsa sohbete düşerken not bırak (uydurma komut engeli).
+    if (!niyet || !niyet.op) {
+      iz('eslesme-yok', ctx, soru);
+      denemeKaydet(ctx.guild.id, 'eslesme-yok');
+      const kural = kuralNiyet(soru);
+      const girisK = kural && KATALOG[kural.op];
+      if (girisK && girisK.risk === 'dusuk' && perms.isOpEnabled(kural.op, KATALOG)) {
+        try {
+          iz('kural-eslesme', ctx, `${kural.op} ${JSON.stringify(kural.args).slice(0, 120)}`);
+          const sonucK = await girisK.run(ctx, kural.args);
+          denetim(ctx, kural.op, kural.args, sonucK);
+          denemeKaydet(ctx.guild.id, 'kural-ok', kural.op);
+          await gonder({ content: sonucK.text }).catch(() => {});
+          return true;
+        } catch (eK) {
+          iz('kural-hata', ctx, eK && eK.message);
+        }
+      }
+      not('anlasilamadi');
+      return false;
+    }
     if (niyet.yedek) iz('yedek-ajan', ctx, niyet.yedek); // yerel patladı, NVIDIA yedek çözdü
     const giris = KATALOG[niyet.op];
     if (!giris || !perms.isOpEnabled(niyet.op, KATALOG)) {
@@ -190,14 +277,16 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
     }
     const sonuc = await giris.run(ctx, niyet.args);
     denetim(ctx, niyet.op, niyet.args, sonuc);
+    denemeKaydet(ctx.guild.id, 'ok', niyet.op);
     await gonder({ content: sonuc.text }).catch(() => {});
     return true;
   } catch (e) {
     iz('akis-hata', ctx, e && e.message);
     // Beklenmeyen patlama da sessiz sohbete gömülmesin: model dürüst açıklasın.
+    try { denemeKaydet(ctx.guild && ctx.guild.id, 'hata'); } catch {}
     try { not('hata'); } catch {}
     return false;
   }
 }
 
-module.exports = { yonetimAkis, bekleyenAl, opAdi, denetim, yonetimBenzeriMi };
+module.exports = { yonetimAkis, bekleyenAl, opAdi, denetim, yonetimBenzeriMi, kuralNiyet, kuralAdCikar, sonDenemeAl };
