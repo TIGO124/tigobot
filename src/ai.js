@@ -131,7 +131,10 @@ function erisilemezMi(e) {
   if (e.code === 'LOCAL_UNREACHABLE') return true;
   if (e.name === 'TimeoutError' || e.name === 'AbortError') return true;
   if (e instanceof TypeError) return true;
-  return /fetch failed|connect|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|timeout/i.test(e.message || '');
+  const m = String(e.message || '');
+  // 502/503/504: Ollama kapalı ama tünel ayakta -> yedeğe düş (model 500'ü hariç).
+  if (/AI hatası \(50[234]\)/.test(m)) return true;
+  return /fetch failed|connect|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|timeout/i.test(m);
 }
 
 async function chat(model, messages, lang) {

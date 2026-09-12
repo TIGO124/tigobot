@@ -51,12 +51,16 @@ function yerelUnreachable() {
 }
 
 // Ağ/timeout hatası mı? (tünel kapalı, PC kapalı, süre aşımı)
+// 502/503/504: Ollama kapalı ama tünel ayakta -> gateway hatası = ulaşılamaz.
+// (Ollama'nın kendi 500'ü hariç; o model/VRAM sorunudur.)
 function agHatasiMi(e) {
   if (!e) return false;
   if (e.code === 'LOCAL_UNREACHABLE') return true;
   if (e.name === 'TimeoutError' || e.name === 'AbortError') return true;
   if (e instanceof TypeError) return true;
-  return /fetch failed|connect|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|EPIPE|timeout|aborted|socket hang up/i.test(String(e.message || ''));
+  const m = String(e.message || '');
+  if (/AI hatası \(50[234]\)/.test(m)) return true;
+  return /fetch failed|connect|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|EPIPE|timeout|aborted|socket hang up/i.test(m);
 }
 
 function sistemDili(lang) {
