@@ -27,19 +27,14 @@ function build(lang) {
           { name: 'kapali', value: 'kapali' }
         )))
     .addSubcommand(s => s.setName('islem').setDescription(t(lang, 'mgmt.sub.islem'))
-      .addStringOption(o => {
-        o.setName('ad').setDescription(t(lang, 'mgmt.opt.ad')).setRequired(true);
-        for (const k of Object.keys(KATALOG)) o.addChoices({ name: k, value: k });
-        return o;
-      })
+      // 25 Discord choice sınırı aşıldığı için serbest metin (execute doğrular;
+      // tam liste için /yonetim durum). Açıklama 100 karakteri geçemez.
+      .addStringOption(o => o.setName('ad').setDescription(t(lang, 'mgmt.opt.ad')).setRequired(true))
       .addStringOption(o => o.setName('durum').setDescription(t(lang, 'mgmt.opt.durum')).setRequired(true)
         .addChoices({ name: 'ac', value: 'ac' }, { name: 'kapat', value: 'kapat' })))
     .addSubcommand(s => s.setName('onay').setDescription(t(lang, 'mgmt.sub.onay'))
-      .addStringOption(o => {
-        o.setName('ad').setDescription(t(lang, 'mgmt.opt.ad')).setRequired(true);
-        for (const k of Object.keys(KATALOG).filter(k => KATALOG[k].risk === 'yuksek')) o.addChoices({ name: k, value: k });
-        return o;
-      })
+      // 25 Discord choice sınırı + dinamik liste: serbest metin (execute doğrular).
+      .addStringOption(o => o.setName('ad').setDescription(t(lang, 'mgmt.opt.ad')).setRequired(true))
       .addStringOption(o => o.setName('durum').setDescription(t(lang, 'mgmt.opt.onay')).setRequired(true)
         .addChoices({ name: 'ister', value: 'ister' }, { name: 'istemez', value: 'istemez' })))
     .addSubcommand(s => s.setName('ajan').setDescription(t(lang, 'mgmt.sub.ajan'))
@@ -88,14 +83,14 @@ function build(lang) {
         return `${acik} ${k} (${KATALOG[k].risk}, ${t(L, 'mgmt.onayKolon')}: ${onay})`;
       });
       return interaction.reply({
-        content: t(L, 'mgmt.durum', { acik: s.acik ? t(L, 'mgmt.acik') : t(L, 'mgmt.kapali'), kim: s.kim })
-          + '\n' + t(L, 'mgmt.durumAjan', { m: ajan.key })
-          + '\n' + t(L, 'mgmt.durumSunucu', {
-            acik: perms.acikMi(interaction.guildId) ? t(L, 'mgmt.acik') : t(L, 'mgmt.kapali'),
-            kim: perms.getKim(interaction.guildId),
-            log: perms.getLogKanal(interaction.guildId) || '-',
-          })
-          + '\n' + satirlar.join('\n'),
+        content: (t(L, 'mgmt.durum', { acik: s.acik ? t(L, 'mgmt.acik') : t(L, 'mgmt.kapali'), kim: s.kim })
+        + '\n' + t(L, 'mgmt.durumAjan', { m: ajan.key })
+        + '\n' + t(L, 'mgmt.durumSunucu', {
+          acik: perms.acikMi(interaction.guildId) ? t(L, 'mgmt.acik') : t(L, 'mgmt.kapali'),
+          kim: perms.getKim(interaction.guildId),
+          log: perms.getLogKanal(interaction.guildId) || '-',
+        })
+        + '\n' + satirlar.join('\n')).slice(0, 1900),
         ephemeral: true,
       });
     }
@@ -113,14 +108,14 @@ function build(lang) {
       return interaction.reply({ content: t(L, 'mgmt.kimOk', { kim }), ephemeral: true });
     }
     if (alt === 'islem') {
-      const ad = interaction.options.getString('ad');
+      const ad = String(interaction.options.getString('ad') || '').toLocaleLowerCase('tr').trim();
       if (!KATALOG[ad]) return interaction.reply({ content: t(L, 'mgmt.bilinmeyen'), ephemeral: true });
       const acik = interaction.options.getString('durum') === 'ac';
       perms.setOpEnabled(ad, acik);
       return interaction.reply({ content: t(L, 'mgmt.islemOk', { ad, durum: acik ? t(L, 'mgmt.acik') : t(L, 'mgmt.kapali') }), ephemeral: true });
     }
     if (alt === 'onay') {
-      const ad = interaction.options.getString('ad');
+      const ad = String(interaction.options.getString('ad') || '').toLocaleLowerCase('tr').trim();
       if (!KATALOG[ad]) return interaction.reply({ content: t(L, 'mgmt.bilinmeyen'), ephemeral: true });
       const istiyor = interaction.options.getString('durum') === 'ister';
       perms.setApproval(ad, istiyor);

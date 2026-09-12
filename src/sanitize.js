@@ -47,10 +47,18 @@ function kullaniciMesaji(e, lang) {
   return t(L, 'err.generic');
 }
 
-// Kullanıcı girdisini Discord limitlerine sığdır (uzunsa … ile keser).
-function clip(s, max = 1000) {
-  s = String(s ?? '');
-  return s.length > max ? s.slice(0, max) + '…' : s;
+// Bot cevaplarına yansıyan kullanıcı girdisindeki @kullanıcı/@everyone
+// ping üretmesin (görünüm aynı kalır, mention kırılır).
+function pingKir(s) {
+  return String(s ?? '').replace(/@/g, '@\u200b');
 }
 
-module.exports = { sanitize, kullaniciMesaji, clip };
+// Kullanıcı girdisini Discord limitlerine sığdır (tam max uzunlukta keser).
+function clip(s, max = 1000) {
+  s = String(s ?? '');
+  if (s.length <= max) return s;
+  if (max <= 1) return s.slice(0, max);
+  return s.slice(0, max - 1) + '…';
+}
+
+module.exports = { sanitize, kullaniciMesaji, clip, pingKir };

@@ -1,5 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const { t, getLang } = require('./i18n');
+const { clip } = require('./sanitize');
 const { load, save } = require('./store');
 const { anketEmbed } = require('./commands/anket');
 
@@ -26,28 +27,51 @@ async function handle(interaction) {
       await interaction.update({ content: t(L, 'mg.reddedildi'), components: [] }).catch(() => {});
       return;
     }
-    const giris = KATALOG[b.op];
-    if (!giris) {
+    // Plan normalleştirme: yeni {plan:[...]} + eski tekil {op,args} uyumu.
+    // Bozuk şekilli adımlar elenir (run(ctx,undefined) TypeError vermesin).
+    const plan = (Array.isArray(b.plan) && b.plan.length ? b.plan
+      : (b.op ? [{ op: b.op, args: b.args }] : []))
+      .filter(p => p && typeof p.op === 'string')
+      .map(p => ({ op: p.op, args: (p.args && typeof p.args === 'object') ? p.args : {} }));
+    if (!plan.length) {
       await interaction.update({ content: t(L, 'mg.islemKapali'), components: [] }).catch(() => {});
       return;
     }
-    // Onay anında işlem kapatılmışsa çalıştırma
+    // Onay anında kapatılmış adım varsa plan durur
     try {
       const { isOpEnabled } = require('./ai-perms');
-      if (!isOpEnabled(b.op, KATALOG)) {
+      if (plan.some(p => !KATALOG[p.op] || !isOpEnabled(p.op, KATALOG))) {
         await interaction.update({ content: t(L, 'mg.islemKapali'), components: [] }).catch(() => {});
         return;
       }
     } catch {}
     const ctx = { guild: interaction.guild, channel: interaction.channel, member: interaction.member, user: interaction.user, lang: b.lang, client: interaction.client };
-    const sonuc = await giris.run(ctx, b.args);
+    // Onay anında kısmi üyeyi tamamla (yetki kontrolleri tam üyeyle çalışsın)
     try {
-      const { denetim } = require('./ai-yonetim');
-      // Denetimde gerçek isteyen görünsün (onaylayan değil)
-      const asil = { ...ctx, user: { tag: b.userTag || b.userId, id: b.userId } };
-      denetim(asil, b.op, b.args, sonuc, `onaylayan: ${interaction.user.tag}`);
+      const { uyeTamamla } = require('./ai-yonetim');
+      const tam = await uyeTamamla(interaction.guild, ctx.member, interaction.user.id);
+      if (tam) ctx.member = tam;
     } catch {}
-    await interaction.update({ content: sonuc.text, components: [] }).catch(() => {});
+    // Denetimde gerçek isteyen görünsün (onaylayan değil)
+    const asil = { ...ctx, user: { tag: b.userTag || b.userId, id: b.userId } };
+    const onaylayan = `onaylayan: ${interaction.user.tag}`;
+    const satirlar = [];
+    for (const adim of plan.slice(0, 10)) {
+      const giris = KATALOG[adim.op];
+      if (!giris) { satirlar.push(`✗ ${adim.op}`); continue; }
+      try {
+        const sonuc = await giris.run(ctx, adim.args);
+        try {
+          const { denetim } = require('./ai-yonetim');
+          denetim(asil, adim.op, adim.args, sonuc, onaylayan);
+        } catch {}
+        satirlar.push((sonuc.ok ? '✓ ' : '✗ ') + clip(String(sonuc.text || ''), 300));
+      } catch {
+        satirlar.push(`✗ ${adim.op}`);
+      }
+    }
+    const birlesik = satirlar.join('\n');
+    await interaction.update({ content: birlesik.slice(0, 1900) + (birlesik.length > 1900 ? '\n' + t(L, 'mg.devamLogda') : '') || t(L, 'mg.islemKapali'), components: [] }).catch(() => {});
     return;
   }
 

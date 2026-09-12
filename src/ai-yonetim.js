@@ -6,22 +6,34 @@
 // - Her uygulama denetim loguna düşer (konsol + logger).
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { t, getLang } = require('./i18n');
+const { pingKir, clip } = require('./sanitize');
+const { argDogrula } = require('./ai-intent');
 const { KATALOG, sonKategoriAl } = require('./ai-actions');
 const perms = require('./ai-perms');
 const { cozumle } = require('./ai-intent');
 
 const ONAY_MS = 60 * 1000;
-const bekleyenler = new Map(); // id -> { op, args, userId, guildId, channelId, lang, timer }
+const BEKLEYEN_MAX = 100;
+const bekleyenler = new Map(); // id -> { plan|op, args, userId, guildId, channelId, lang, timer }
+
+// Bellek şişmesin: en fazla BEKLEYEN_MAX onay (en eski düşer, timer temizlenir).
+function bekleyenTahliye() {
+  try {
+    if (bekleyenler.size >= BEKLEYEN_MAX) {
+      const ilk = bekleyenler.keys().next().value;
+      const eski = bekleyenler.get(ilk);
+      try { clearTimeout(eski && eski.timer); } catch {}
+      bekleyenler.delete(ilk);
+    }
+  } catch {}
+}
 
 function opAdi(op, lang) {
   return t(lang, `mg.op.${op}`) === `mg.op.${op}` ? op : t(lang, `mg.op.${op}`);
 }
 
 function bekleyenEkle(op, args, ctx) {
-  // Bellek şişmesin: en fazla 100 bekleyen onay (en eski düşer).
-  try {
-    if (bekleyenler.size >= 100) bekleyenler.delete(bekleyenler.keys().next().value);
-  } catch {}
+  bekleyenTahliye();
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const timer = setTimeout(() => { bekleyenler.delete(id); }, ONAY_MS);
   bekleyenler.set(id, { op, args, userId: ctx.user.id, userTag: ctx.user.tag, guildId: ctx.guild.id, channelId: ctx.channel.id, lang: ctx.lang, timer });
@@ -44,14 +56,14 @@ function denetim(ctx, op, args, sonuc, ekstra) {
   // Denetim kanalı: sunucu ayarı -> LOG_CHANNEL_ID -> isim araması. Sessiz geçilir.
   try {
     const L = getLang(ctx.guild.id);
-    const ozet = Object.entries(args || {}).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' | ').slice(0, 1000) || '-';
+    const ozet = clip(pingKir(Object.entries(args || {}).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' | ')), 900) || '-';
     const embed = new EmbedBuilder()
       .setTitle(t(L, 'mg.logBaslik'))
       .setColor(sonuc.ok ? 0x57F287 : 0xED4245)
       .addFields(
         { name: t(L, 'mg.logIslem'), value: `${opAdi(op, L)} (${op})`, inline: true },
         { name: t(L, 'mg.logSonuc'), value: sonuc.ok ? 'OK' : t(L, 'mg.logHata'), inline: true },
-        { name: t(L, 'mg.logIsteyen'), value: `${ctx.user.tag} (${ctx.user.id})${ekstra ? `\n${ekstra}` : ''}` },
+        { name: t(L, 'mg.logIsteyen'), value: clip(`${ctx.user.tag} (${ctx.user.id})${ekstra ? `\n${ekstra}` : ''}`, 900) },
         { name: t(L, 'mg.logParam'), value: ozet },
       )
       .setTimestamp();
@@ -78,6 +90,33 @@ function denetimKanali(guild) {
   } catch { return null; }
 }
 
+function bekleyenEklePlan(plan, ctx) {
+  bekleyenTahliye();
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const timer = setTimeout(() => { bekleyenler.delete(id); }, ONAY_MS);
+  bekleyenler.set(id, { plan, userId: ctx.user.id, userTag: ctx.user.tag, guildId: ctx.guild.id, channelId: ctx.channel.id, lang: ctx.lang, timer });
+  return id;
+}
+
+function planOzeti(plan, lang, maxAdim = 10) {
+  const satirlar = plan.slice(0, maxAdim).map((p, i) => {
+    const ozet = pingKir(Object.entries(p.args || {}).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' | '));
+    return `${i + 1}. ${opAdi(p.op, lang)}${ozet ? ` (${clip(ozet, 120)})` : ''}`;
+  });
+  if (plan.length > maxAdim) satirlar.push(`…(+${plan.length - maxAdim})`);
+  return satirlar.join('\n');
+}
+
+async function onaySorPlan(gonder, ctx, plan) {
+  const id = bekleyenEklePlan(plan, ctx);
+  const L = ctx.lang;
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`ayonay_${id}`).setLabel(t(L, 'mg.onayla')).setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`ayred_${id}`).setLabel(t(L, 'mg.reddet')).setStyle(ButtonStyle.Secondary)
+  );
+  await gonder({ content: t(L, 'mg.onayPlan', { n: plan.length, ozet: planOzeti(plan, L) }).slice(0, 2000), components: [row] });
+}
+
 async function onaySor(gonder, ctx, op, args) {
   const id = bekleyenEkle(op, args, ctx);
   const L = ctx.lang;
@@ -86,7 +125,7 @@ async function onaySor(gonder, ctx, op, args) {
     new ButtonBuilder().setCustomId(`ayonay_${id}`).setLabel(t(L, 'mg.onayla')).setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId(`ayred_${id}`).setLabel(t(L, 'mg.reddet')).setStyle(ButtonStyle.Secondary)
   );
-  await gonder({ content: t(L, 'mg.onaySor', { op: opAdi(op, L), ozet }), components: [row] });
+  await gonder({ content: pingKir(t(L, 'mg.onaySor', { op: opAdi(op, L), ozet: clip(ozet, 1500) })).slice(0, 2000), components: [row] });
 }
 
 // Yönetim fiili çağrıştıran kelimeler (sadece HATA yolunda kullanılır:
@@ -94,16 +133,22 @@ async function onaySor(gonder, ctx, op, args) {
 // yerine kısa hata gösterilir).
 // NOT: 'grub' ayrıca yazılır; Türkçe ünsüz yumuşamasıyla grup->grubu/gruba
 // olur ve 'grup' alt-dizgisi TUTMAZ ("grubu".includes("grup") === false)!
-const YONETIM_KELIME = ['kanal', 'kategori', 'grup', 'grub', 'rol', 'rütbe', 'rutbe', 'sustur', 'timeout', 'mute', 'yasakla', 'ban', 'kick', 'uyar', 'warn', 'sayaç', 'sayac', 'counter', 'anket', 'poll', 'oylama', 'hatırlat', 'hatirlat', 'remind', 'oluştur', 'olustur', 'create', 'channel', 'category', 'group', 'role', 'delete', 'clear', 'temizle', 'sil', 'sohbet', 'chat', 'oda', 'room', 'sıra', 'sira', 'sırasıyla', 'sirasiyla', 'yanlış', 'yanlis', 'düzelt', 'duzelt', 'yapma', 'tekrar', 'olmamış', 'olmamis', 'aç', 'ac'];
+const YONETIM_KELIME = ['kanal', 'kategori', 'grup', 'grub', 'rol', 'rütbe', 'rutbe', 'sustur', 'timeout', 'mute', 'yasakla', 'ban', 'kick', 'uyar', 'warn', 'sayaç', 'sayac', 'counter', 'anket', 'poll', 'oylama', 'hatırlat', 'hatirlat', 'remind', 'oluştur', 'olustur', 'create', 'channel', 'category', 'group', 'role', 'delete', 'clear', 'temizle', 'sil', 'kapat', 'kov', 'nick', 'takma', 'sabitle', 'yayınla', 'yayinla', 'publish', 'yavas', 'yavaş', 'slowmode', 'emoji', 'sunucu', 'server', 'doğrulama', 'dogrulama', 'verification', 'sablon', 'şablon', 'template', 'yedek', 'backup', 'etkinli', 'event', 'sohbet', 'chat', 'oda', 'room', 'sıra', 'sira', 'sırasıyla', 'sirasiyla', 'sırala', 'sirala', 'yanlış', 'yanlis', 'düzelt', 'duzelt', 'düzenle', 'duzenle', 'değiştir', 'degistir', 'taşı', 'tasi', 'move', 'edit', 'izin', 'yetki', 'renk', 'davet', 'invite', 'konu', 'topic', 'yapma', 'tekrar', 'olmamış', 'olmamis', 'aç', 'ac'];
 
 // Kısa anahtarlarla çakışan sıradan kelimeler (bana->ban, kontrol->rol):
 // bunlar ayıklanır, kalan metinde arama yapılır.
 const BLOKLU_KELIME = new Set(['bana', 'kontrol', 'parola', 'banka', 'asil', 'nesil', 'vasıf']);
 
+// Kısa fiiller substring aranamaz ("at" -> kat/sat/hatırla patlar):
+// bunlar SADECE tam kelimeyse yönetim sayılır.
+const YONETIM_KELIME_TAM = new Set(['at', 'aç', 'ac', 'kapat', 'sil', 'kur', 'ekle', 'yap']);
+
 function yonetimBenzeriMi(soru) {
   const ham = String(soru || '').toLowerCase();
-  const temiz = ham.split(/[^a-zçğıöşü0-9]+/u).filter(w => w && !BLOKLU_KELIME.has(w)).join(' ');
-  if (!temiz) return false;
+  const kelimeler = ham.split(/[^a-zçğıöşü0-9]+/u).filter(w => w && !BLOKLU_KELIME.has(w));
+  if (!kelimeler.length) return false;
+  if (kelimeler.some(w => YONETIM_KELIME_TAM.has(w))) return true;
+  const temiz = kelimeler.join(' ');
   return YONETIM_KELIME.some(k => temiz.includes(k));
 }
 
@@ -324,6 +369,20 @@ function kuralNiyetler(soru, guild) {
   return adlar.map(ad => ({ op: 'kategori_ac', args: { ad } }));
 }
 
+// Kısmi member (APIInteractionGuildMember) roles/permissions taşımaz:
+// tam üyeyi çek, olmazsa null (çağıran ayırt edilebilir hata verir).
+async function uyeTamamla(guild, member, userId) {
+  try {
+    if (member && member.roles && member.roles.highest && member.permissions && typeof member.permissions.has === 'function') return member;
+    if (!guild || !userId) return null;
+    const tam = await guild.members.fetch(userId).catch(() => null);
+    if (tam && tam.roles && tam.roles.highest) return tam;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // ctx: { guild, channel, member, user, lang }
 // gonder: (payload) => Promise (reply/send soyutlaması)
 // bilgi (opsiyonel, {}): yönetim ele ALINMADAN sohbete düşülürse nedeni yazar:
@@ -344,6 +403,16 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
     if (!ctx.guild) { not('dm'); return false; }
     // Özellik kapalıysa temiz sohbet doğru davranıştır (not YOK).
     if (!perms.acikMi(ctx.guild.id)) { iz('kapali', ctx); return false; }
+    // Kısmi üyeyi tamamla; olmazsa yanlış 'yetkisiz' yerine dürüst hata.
+    try {
+      const tam = await uyeTamamla(ctx.guild, ctx.member, ctx.user && ctx.user.id);
+      if (tam) ctx.member = tam;
+      else if (ctx.member) {
+        try { denemeKaydet(ctx.guild.id, 'uye-tamamlanamadi'); } catch {}
+        not('uyeYok');
+        return false;
+      }
+    } catch {}
     if (!perms.kullanabilirMiYonetim(ctx.user, ctx.member, ctx.guild)) {
       // ID'lerle logla: Railway logundan kimin neden takıldığı anında görünsün
       // (OWNER_ID eşleşmiyor mu, sunucu sahibi mi değil?).
@@ -433,26 +502,54 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
     }
     // Ajan da eşleştiremedi -> sohbete düşerken not bırak:
     // model "nasıl yapılır"ı başka botların komutlarıyla uydurmasın.
-    if (!niyet || !niyet.op) {
+    const hamPlan = Array.isArray(niyet && niyet.plan) ? niyet.plan
+      : (niyet && niyet.op ? [{ op: niyet.op, args: niyet.args }] : []);
+    if (!hamPlan.length) {
       iz('eslesme-yok', ctx, soru);
       denemeKaydet(ctx.guild.id, 'eslesme-yok');
       not('anlasilamadi');
       return false;
     }
     if (niyet.yedek) iz('yedek-ajan', ctx, niyet.yedek); // yerel patladı, NVIDIA yedek çözdü
-    const giris = KATALOG[niyet.op];
-    if (!giris || !perms.isOpEnabled(niyet.op, KATALOG)) {
+    // Planı doğrula: bilinmeyen/kapalı/argümanı bozuk adımlar elenir (en fazla 10).
+    // Elenen sayısı rapora eklenir (sessiz eleme yok).
+    const plan = [];
+    let elenen = 0;
+    for (const adim of hamPlan.slice(0, 10)) {
+      if (!adim) { elenen++; continue; }
+      const giris = KATALOG[adim.op];
+      if (!giris || !perms.isOpEnabled(adim.op, KATALOG)) { elenen++; continue; }
+      let duz = null;
+      try {
+        duz = argDogrula(adim.op, (adim.args && typeof adim.args === 'object') ? adim.args : {});
+      } catch { duz = null; }
+      if (!duz) { elenen++; continue; }
+      plan.push({ op: adim.op, args: duz });
+    }
+    if (!plan.length) {
       await gonder({ content: t(L, 'mg.islemKapali') }).catch(() => {});
       return true;
     }
-    if (giris.risk === 'yuksek' && perms.needsApproval(niyet.op)) {
-      await onaySor(gonder, ctx, niyet.op, niyet.args);
+    // Yüksek-risk + onay gerektiren adım varsa TÜM plan tek onay kartında.
+    if (plan.some(p => KATALOG[p.op].risk === 'yuksek' && perms.needsApproval(p.op))) {
+      await onaySorPlan(gonder, ctx, plan);
       return true;
     }
-    const sonuc = await giris.run(ctx, niyet.args);
-    denetim(ctx, niyet.op, niyet.args, sonuc);
-    denemeKaydet(ctx.guild.id, 'ok', niyet.op);
-    await gonder({ content: sonuc.text }).catch(() => {});
+    const metinler = [];
+    for (const adim of plan) {
+      try {
+        const r = await KATALOG[adim.op].run(ctx, adim.args);
+        denetim(ctx, adim.op, adim.args, r);
+        metinler.push((r.ok ? '✓ ' : '✗ ') + clip(String(r.text || ''), 300));
+      } catch (eK) {
+        iz('plan-hata', ctx, `${adim.op}: ${eK && eK.message}`);
+        metinler.push('✗ ' + adim.op);
+      }
+    }
+    if (elenen > 0) metinler.push(t(L, 'mg.cokluAtlandi', { n: elenen }));
+    denemeKaydet(ctx.guild.id, plan.length > 1 ? 'ok-plan' : 'ok', plan.map(p => p.op).join('+'));
+    const birlesik = metinler.join('\n');
+    await gonder({ content: birlesik.slice(0, 1900) + (birlesik.length > 1900 ? '\n' + t(L, 'mg.devamLogda') : '') }).catch(() => {});
     return true;
   } catch (e) {
     iz('akis-hata', ctx, e && e.message);
@@ -463,4 +560,4 @@ async function yonetimAkis(ctx, soru, gonder, bilgi) {
   }
 }
 
-module.exports = { yonetimAkis, bekleyenAl, opAdi, denetim, yonetimBenzeriMi, kuralNiyetler, kuralEbeveynHam, kuralAdlar, kuralAralikAdlar, KURAL_MAX_ISLEM, sonDenemeAl };
+module.exports = { yonetimAkis, bekleyenAl, opAdi, denetim, yonetimBenzeriMi, kuralNiyetler, kuralEbeveynHam, kuralAdlar, kuralAralikAdlar, KURAL_MAX_ISLEM, sonDenemeAl, uyeTamamla };

@@ -66,8 +66,8 @@ function agHatasiMi(e) {
 function sistemDili(lang) {
   const L = lang === 'en' ? 'en' : 'tr';
   return L === 'en'
-    ? 'You are TigoBot, a Discord server management assistant created by caglar_007. The user asks in natural language to manage the server. Use ONLY the provided tools for management requests. If the request is NOT a server management task (normal chat, question, joke), do NOT call any tool. Never invent operations outside the tool list. /no_think'
-    : 'Sen caglar_007 tarafından yapılan TigoBot, Discord sunucu yönetim asistanısın. Kullanıcı sunucuyu yönetmek için doğal dille yazar. Yönetim isteklerinde SADECE verilen araçları kullan. İstek sunucu yönetimi DEĞİLSE (normal sohbet, soru, espri) HİÇBİR araç çağırma. Liste dışı işlem uydurma. /no_think';
+    ? 'You are TigoBot, a Discord server management assistant created by caglar_007. The user asks in natural language to manage the server. Use ONLY the provided tools for management requests. If the request is NOT a server management task (normal chat, question, joke), do NOT call any tool. Never invent operations outside the tool list. If several operations are needed, return ALL of them at once as tool calls (max 10 steps). /no_think'
+    : 'Sen caglar_007 tarafından yapılan TigoBot, Discord sunucu yönetim asistanısın. Kullanıcı sunucuyu yönetmek için doğal dille yazar. Yönetim isteklerinde SADECE verilen araçları kullan. İstek sunucu yönetimi DEĞİLSE (normal sohbet, soru, espri) HİÇBİR araç çağırma. Liste dışı işlem uydurma. Birden çok işlem gerekiyorsa hepsini tek seferde tool çağrıları olarak döndür (en fazla 10 adım). /no_think';
 }
 
 function argDogrula(op, args) {
@@ -84,10 +84,19 @@ function argDogrula(op, args) {
     if (tip === 'integer') {
       const n = parseInt(v, 10);
       if (Number.isFinite(n)) duz[k] = n;
+    } else if (tip === 'boolean') {
+      if (typeof v === 'boolean') duz[k] = v;
+      else if (typeof v === 'number') duz[k] = v !== 0;
+      else if (typeof v === 'string') {
+        const s = v.toLocaleLowerCase('tr').trim();
+        if (['true', '1', 'evet', 'açık', 'acik', 'ac', 'aç'].includes(s)) duz[k] = true;
+        else if (['false', '0', 'hayır', 'hayir', 'kapalı', 'kapali', 'kapat'].includes(s)) duz[k] = false;
+      }
     } else if (tip === 'array') {
       if (Array.isArray(v)) {
         const min = Number.isFinite(ozellik[k].minItems) ? ozellik[k].minItems : 0;
-        const dizi = v.map(x => String(x)).slice(0, 4);
+        const cap = Number.isFinite(ozellik[k].maxItems) ? ozellik[k].maxItems : 10;
+        const dizi = v.map(x => String(x)).slice(0, cap);
         if (dizi.length >= min) duz[k] = dizi;
       }
     } else {
@@ -98,6 +107,53 @@ function argDogrula(op, args) {
     if (duz[k] === undefined || duz[k] === '' || (Array.isArray(duz[k]) && !duz[k].length)) return null;
   }
   return duz;
+}
+
+// Tool çağrı listesinden plan kurar: geçerli adımları toplar (en fazla 10).
+// Tek adımda {op,args}, çok adımda {plan:[...]}, hiç yoksa {eslesme:false}.
+function planKUR(cagrilar) {
+  const plan = [];
+  for (const c of (cagrilar || []).slice(0, 10)) {
+    const fn = (c && c.function) || {};
+    const op = String(fn.name || '');
+    if (!KATALOG[op] || !isOpEnabled(op, KATALOG)) continue;
+    let args = {};
+    try { args = JSON.parse(fn.arguments || '{}'); } catch { continue; }
+    const duz = argDogrula(op, args);
+    if (!duz) continue;
+    // Aynı adımın tekrarını ele (model bazen çift çağırır)
+    const imza = op + ':' + JSON.stringify(duz);
+    if (plan.some(p => p.imza === imza)) continue;
+    plan.push({ op, args: duz, imza });
+  }
+  const temiz = plan.map(({ op, args }) => ({ op, args }));
+  if (!temiz.length) return { eslesme: false };
+  if (temiz.length === 1) return temiz[0];
+  return { plan: temiz };
+}
+
+// JSON gövdesinden plan kurar: {"plan":[{op,args}]} veya tekil {"op":...}.
+function planJson(j) {
+  if (!j || typeof j !== 'object') return { eslesme: false };
+  if (Array.isArray(j.plan)) {
+    const plan = [];
+    for (const a of j.plan.slice(0, 10)) {
+      if (!a || !KATALOG[a.op] || !isOpEnabled(a.op, KATALOG)) continue;
+      const duz = argDogrula(a.op, a.args);
+      if (!duz) continue;
+      const imza = a.op + ':' + JSON.stringify(duz);
+      if (plan.some(p => p.imza === imza)) continue;
+      plan.push({ op: a.op, args: duz, imza });
+    }
+    const temiz = plan.map(({ op, args }) => ({ op, args }));
+    if (!temiz.length) return { eslesme: false };
+    if (temiz.length === 1) return temiz[0];
+    return { plan: temiz };
+  }
+  if (!j || j.op === 'sohbet' || !KATALOG[j.op] || !isOpEnabled(j.op, KATALOG)) return { eslesme: false };
+  const duz = argDogrula(j.op, j.args);
+  if (!duz) return { eslesme: false };
+  return { op: j.op, args: duz };
 }
 
 async function nativeCozumle(base, model, soru, lang, ayar) {
@@ -127,16 +183,7 @@ async function nativeCozumle(base, model, soru, lang, ayar) {
   }
   const data = await res.json();
   const cagrilar = (data.message && data.message.tool_calls) || [];
-  if (!cagrilar.length) return { eslesme: false };
-  const ilk = cagrilar[0] || {};
-  const fn = ilk.function || {};
-  const op = String(fn.name || '');
-  if (!KATALOG[op] || !isOpEnabled(op, KATALOG)) return { eslesme: false };
-  let args = {};
-  try { args = JSON.parse(fn.arguments || '{}'); } catch { return { eslesme: false }; }
-  const duz = argDogrula(op, args);
-  if (!duz) return { eslesme: false };
-  return { op, args: duz };
+  return planKUR(cagrilar);
 }
 
 async function jsonCozumle(base, model, soru, lang, ayar) {
@@ -148,7 +195,7 @@ async function jsonCozumle(base, model, soru, lang, ayar) {
     body: JSON.stringify({
       model,
       messages: [
-        { role: 'system', content: sistemDili(lang) + ` Yönetim isteğiyse SADECE şu JSON'u yaz: {"op":"<${sema}>","args":{...}}. Yönetim değilse SADECE şunu yaz: {"op":"sohbet"}. Başka hiçbir şey yazma. /no_think` },
+        { role: 'system', content: sistemDili(lang) + ` Yönetim isteğiyse SADECE şu JSON'u yaz: {"op":"<${sema}>","args":{...}}. Birden çok işlem varsa {"plan":[{"op":"...","args":{...}}]} yaz (en fazla 10 adım). Yönetim değilse SADECE şunu yaz: {"op":"sohbet"}. Başka hiçbir şey yazma. /no_think` },
         { role: 'user', content: String(soru).slice(0, 2000) },
       ],
       stream: false,
@@ -167,10 +214,7 @@ async function jsonCozumle(base, model, soru, lang, ayar) {
   const ham = String((data.message && data.message.content) || '').trim();
   let j = null;
   try { j = JSON.parse(ham); } catch { return { eslesme: false }; }
-  if (!j || j.op === 'sohbet' || !KATALOG[j.op] || !isOpEnabled(j.op, KATALOG)) return { eslesme: false };
-  const duz = argDogrula(j.op, j.args);
-  if (!duz) return { eslesme: false };
-  return { op: j.op, args: duz };
+  return planJson(j);
 }
 
 // Ölü/kotalı yedek pas-geçme: 404/410 (yayından kalkmış) ve 429 (kota)
@@ -208,7 +252,7 @@ async function cozumle(soru, lang, guildId) {
     const dene = async (h) => {
       try {
         const n = await nvidiaNativeCozumle(h, soru, lang, yedekAyar);
-        if (n.op) return n;
+        if (n.plan || n.op) return n;
       } catch (e) {
         if (/401|403/.test(String((e && e.message) || ''))) throw e;
         // Diğer hatalarda JSON yedeği denenir
@@ -224,12 +268,13 @@ async function cozumle(soru, lang, guildId) {
       if (!secili && adayOlumu(h.ad)) { atlanan++; continue; }
       try {
         const n = await dene(h);
-        if (n.op) {
+        const sarmali = n.plan ? { plan: n.plan } : (n.op ? { op: n.op, args: n.args } : null);
+        if (sarmali) {
           if (!secili) {
             try { oluModeller.delete(h.ad); } catch {}
-            return { op: n.op, args: n.args, yedek: h.ad };
+            return { ...sarmali, yedek: h.ad };
           }
-          return n;
+          return sarmali;
         }
         hatalar.push(`${secili ? hedef.model : h.ad}: eşleşme yok`);
       } catch (e2) {
@@ -272,9 +317,11 @@ async function cozumle(soru, lang, guildId) {
       if (adayOlumu(yh.ad)) { atlanan++; continue; }
       try {
         const n = await nvidiaNativeCozumle(yh, soru, lang, yedekAyar);
-        if (n.op) { oluModeller.delete(yh.ad); return { op: n.op, args: n.args, yedek: yh.ad }; }
+        const s1 = n.plan ? { plan: n.plan } : (n.op ? { op: n.op, args: n.args } : null);
+        if (s1) { oluModeller.delete(yh.ad); return { ...s1, yedek: yh.ad }; }
         const j = await nvidiaJsonCozumle(yh, soru, lang, yedekAyar);
-        if (j.op) { oluModeller.delete(yh.ad); return { op: j.op, args: j.args, yedek: yh.ad }; }
+        const s2 = j.plan ? { plan: j.plan } : (j.op ? { op: j.op, args: j.args } : null);
+        if (s2) { oluModeller.delete(yh.ad); return { ...s2, yedek: yh.ad }; }
         try { console.log(`AI-YEDEK ${yh.ad} eslesme-yok, sonrakine geçiliyor`); } catch {}
         hatalar.push(`${yh.ad}: eşleşme yok`);
       } catch (e2) {
@@ -331,7 +378,7 @@ async function yerelDene(hedef, soru, lang, ayar) {
   if (!(await yerelHizliKontrol(hedef.base))) throw yerelUnreachable();
   try {
     const n = await nativeCozumle(hedef.base, hedef.model, soru, lang, ayar);
-    if (n.op) return n;
+    if (n.plan || n.op) return n;
   } catch (e) {
     // Native hata (404 eski sürüm, 400 tools-desteksiz, 500 model sorunu):
     // önce JSON yedeği denenir.
@@ -397,16 +444,7 @@ async function nvidiaNativeCozumle(hedef, soru, lang, ayar) {
   }
   const data = await res.json();
   const msg = (data.choices && data.choices[0] && data.choices[0].message) || {};
-  const cagrilar = msg.tool_calls || [];
-  if (!cagrilar.length) return { eslesme: false };
-  const fn = (cagrilar[0] && cagrilar[0].function) || {};
-  const op = String(fn.name || '');
-  if (!KATALOG[op] || !isOpEnabled(op, KATALOG)) return { eslesme: false };
-  let args = {};
-  try { args = JSON.parse(fn.arguments || '{}'); } catch { return { eslesme: false }; }
-  const duz = argDogrula(op, args);
-  if (!duz) return { eslesme: false };
-  return { op, args: duz };
+  return planKUR(msg.tool_calls || []);
 }
 
 // NVIDIA JSON yedeği.
@@ -415,7 +453,7 @@ async function nvidiaJsonCozumle(hedef, soru, lang, ayar) {
   const govde = {
     model: hedef.model,
     messages: [
-      { role: 'system', content: sistemDili(lang) + ` Yönetim isteğiyse SADECE şu JSON'u yaz: {"op":"<${opAdlari}>","args":{...}}. Yönetim değilse SADECE şunu yaz: {"op":"sohbet"}. Başka hiçbir şey yazma.` },
+      { role: 'system', content: sistemDili(lang) + ` Yönetim isteğiyse SADECE şu JSON'u yaz: {"op":"<${opAdlari}>","args":{...}}. Birden çok işlem varsa {"plan":[{"op":"...","args":{...}}]} yaz (en fazla 10 adım). Yönetim değilse SADECE şunu yaz: {"op":"sohbet"}. Başka hiçbir şey yazma.` },
       { role: 'user', content: String(soru).slice(0, 2000) },
     ],
     temperature: 0.1,
@@ -437,10 +475,7 @@ async function nvidiaJsonCozumle(hedef, soru, lang, ayar) {
   const ham = String((data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '').trim();
   let j = null;
   try { j = JSON.parse(ham); } catch { return { eslesme: false }; }
-  if (!j || j.op === 'sohbet' || !KATALOG[j.op] || !isOpEnabled(j.op, KATALOG)) return { eslesme: false };
-  const duz = argDogrula(j.op, j.args);
-  if (!duz) return { eslesme: false };
-  return { op: j.op, args: duz };
+  return planJson(j);
 }
 
 // Açılış öz-denetimi (erken uyarı): sorun istek anında değil, logda
@@ -515,4 +550,4 @@ async function baslangicKontrolu() {
   return notlar;
 }
 
-module.exports = { cozumle, argDogrula, baslangicKontrolu };
+module.exports = { cozumle, argDogrula, baslangicKontrolu, planKUR, planJson };

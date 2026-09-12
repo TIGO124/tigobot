@@ -10,7 +10,19 @@ const path = require('path');
 let hata = 0;
 const fail = (m) => { hata++; console.error('SELFTEST HATA: ' + m); };
 
-// 1) Komutlar
+// 1) Komutlar + Discord limitleri (isim ≤32, açıklama ≤100, seçenek ≤25)
+const AD_RE = /^[\p{L}\p{N}_-]{1,32}$/u;
+function limitDenele(j, etiket) {
+  if (j.description && j.description.length > 100) fail(`${etiket}: açıklama 100 karakteri aşıyor (${j.description.length})`);
+  for (const o of (j.options || [])) {
+    const dallar = [o, ...((o.options || []))];
+    for (const d of dallar) {
+      if (d.description && d.description.length > 100) fail(`${etiket}/${d.name}: seçenek açıklaması 100+ (${d.description.length})`);
+      if (d.choices && d.choices.length > 25) fail(`${etiket}/${d.name}: choices 25+ (${d.choices.length})`);
+      if (d.name && !AD_RE.test(d.name)) fail(`${etiket}: geçersiz ad ${d.name}`);
+    }
+  }
+}
 const cmdDir = path.join(__dirname, 'commands');
 for (const f of fs.readdirSync(cmdDir).filter(x => x.endsWith('.js'))) {
   try {
@@ -21,8 +33,10 @@ for (const f of fs.readdirSync(cmdDir).filter(x => x.endsWith('.js'))) {
         const c = mod.build(L);
         const j = c.data.toJSON();
         if (!j || !j.name) fail(`${f}/${L}: isim yok`);
+        if (j.name && !AD_RE.test(j.name)) fail(`${f}/${L}: geçersiz komut adı ${j.name}`);
         if (!c.execute) fail(`${f}/${L}: execute yok`);
         if (!j.description || j.description === j.name) fail(`${f}/${L}: açıklama eksik`);
+        limitDenele(j, `${f}/${L}`);
       } catch (e) { fail(`${f}/${L}: ${e.message}`); }
     }
   } catch (e) { fail(f + ': ' + e.message); }
@@ -85,6 +99,35 @@ try {
     if (!Array.isArray(arr) || !arr.length) fail(`şema ${L} boş`);
   }
 } catch (e) { fail('schema: ' + e.message); }
+
+// 6) KATALOG bütünlüğü: her op'un tr+en adı + risk + şema tutarlılığı
+try {
+  const { KATALOG } = require('./ai-actions');
+  const { t } = require('./i18n');
+  const keys = Object.keys(KATALOG);
+  if (!keys.length) fail('KATALOG boş');
+  for (const k of keys) {
+    const g = KATALOG[k];
+    if (!g.tool || !g.tool.parameters || typeof g.tool.parameters !== 'object') fail(`KATALOG ${k}: şema eksik`);
+    if (g.risk !== 'dusuk' && g.risk !== 'yuksek') fail(`KATALOG ${k}: risk yok`);
+    if (typeof g.run !== 'function') fail(`KATALOG ${k}: run yok`);
+    if (t('tr', `mg.op.${k}`) === `mg.op.${k}`) fail(`KATALOG ${k}: TR ad yok`);
+    if (t('en', `mg.op.${k}`) === `mg.op.${k}`) fail(`KATALOG ${k}: EN ad yok`);
+    // Tool şeması: required alanlar properties'te tanımlı olmalı
+    try {
+      const p = g.tool.parameters;
+      for (const r of (p.required || [])) {
+        if (!p.properties || !p.properties[r]) fail(`KATALOG ${k}: required '${r}' tanımsız`);
+      }
+    } catch {}
+    // Array şemalarında cap tutarlılığı (toplu işlemler sessiz budanmasın)
+    try {
+      for (const [ak, av] of Object.entries((g.tool.parameters.properties || {}))) {
+        if (av && av.type === 'array' && !Number.isFinite(av.maxItems)) fail(`KATALOG ${k}.${ak}: maxItems yok`);
+      }
+    } catch {}
+  }
+} catch (e) { fail('KATALOG: ' + e.message); }
 
 if (hata) {
   console.error(`SELFTEST: ${hata} hata bulundu.`);
